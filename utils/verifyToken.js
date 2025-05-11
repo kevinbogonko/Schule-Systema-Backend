@@ -1,27 +1,42 @@
-import jwt from 'jsonwebtoken'
-import { createError } from './ErrorHandler.js'
+import jwt from "jsonwebtoken";
+import { createError } from "./ErrorHandler.js";
+import pool from "../config/db_connection.js"
 
-// Middleware for Protected Routes
-export const verifyToken = (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1]
-        
-    if(!token) return next(createError(401, 'You are not authenticated - Please log in again'))
-  
-    jwt.verify(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY, (err, user) => {
-      if (!err) {
-        req.user = user
-        return next()
-      }
-      
-      // Specific expired token response
-      if (err.name === 'TokenExpiredError') {
-        return next(createError(401, 'Authentication token expired'))
-      }
-  
-      // Any other JWT error
-      return res.status(403).json({
-        status: 403,
-        message: 'Forbiden Access!'
-      })
-    })
+// Helper to verify if token is revoked
+const isTokenRevoked = async (jti) => {
+  const { rows } = await pool.query(
+    "SELECT 1 FROM revoked_tokens WHERE token_id = $1 LIMIT 1",
+    [jti]
+  );
+  return rows.length > 0;
+};
+
+// Middleware for protected routes
+export const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next(createError(401, "Missing or invalid authorization header"));
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // Decode and verify JWT
+    const decoded = jwt.verify(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
+
+    // Check if token is revoked
+    const revoked = await isTokenRevoked(decoded.jti);
+    if (revoked) {
+      return next(createError(401, "This token has been revoked"));
+    }
+
+    req.user = decoded; // attach user info
+    next();
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return next(createError(401, "Authentication token expired"));
+    }
+    return next(createError(403, "Forbidden access - Invalid token"));
   }
+};

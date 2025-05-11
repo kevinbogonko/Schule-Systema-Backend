@@ -1295,7 +1295,8 @@ export const StudentMarkList = async (req, res, next) => {
       motto: particularsResult.rows[0]?.motto || "",
       address: particularsResult.rows[0]?.address || "",
       phone: particularsResult.rows[0]?.phone || "",
-      // exam: exams.exam_1.name.replace(/_/g, " ").toUpperCase(),
+      // exam: yearValue,
+      // exams?.exam_1.name.replace(/_/g, " ").toUpperCase(),
       logoPath: logoPath,
     };
 
