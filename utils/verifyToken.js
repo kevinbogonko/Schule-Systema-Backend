@@ -14,24 +14,27 @@ const isTokenRevoked = async (jti) => {
 // Middleware for protected routes
 export const verifyToken = async (req, res, next) => {
   try {
+    // Get token from Authorization header or cookie
     const authHeader = req.headers.authorization;
+    const tokenFromHeader = authHeader?.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : null;
+    const tokenFromCookie = req.cookies?.access_token;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return next(createError(401, "Missing or invalid authorization header"));
+    const token = tokenFromHeader || tokenFromCookie;
+
+    if (!token) {
+      return next(createError(401, "Missing authorization token"));
     }
 
-    const token = authHeader.split(" ")[1];
-
-    // Decode and verify JWT
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
 
-    // Check if token is revoked
     const revoked = await isTokenRevoked(decoded.jti);
     if (revoked) {
       return next(createError(401, "This token has been revoked"));
     }
 
-    req.user = decoded; // attach user info
+    req.user = decoded;
     next();
   } catch (err) {
     if (err.name === "TokenExpiredError") {

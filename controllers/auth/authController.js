@@ -63,75 +63,6 @@ export const registerUser = async (req, res, next) => {
 };
 
 // User Login Controller
-// export const userLogin = async (req, res, next) => {
-
-//     const ip = req.ip
-//     const { username, password } = req.body
-  
-//     try {
-//       await loginLimiter.consume(ip)
-  
-//       const result = await pool.query(
-//         "SELECT * FROM auth WHERE username = $1", 
-//         [username]
-//       )
-  
-//       if (result.rows.length === 0) {
-//         return next(createError(401, 'User record does not exist in database'))
-//       }
-  
-//       const user = result.rows[0]
-//       const isPasswordCorrect = await bcrypt.compare(password, user.password)
-  
-//       if (!isPasswordCorrect) {
-//         return next(createError(401, 'Invalid credentials'))
-//       }
-  
-//       const accessToken = jwt.sign(
-//         { user: { id: user.id, username: user.username } },
-//         process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
-//         { expiresIn: '3m' }
-//       )
-  
-//       const refreshToken = jwt.sign(
-//         { user: { id: user.id, username: user.username } },
-//         process.env.JWT_REFRESH_TOKEN_SECRET_KEY,
-//         { expiresIn: '3m' }
-//       )
-  
-//       res.cookie("refresh_token", refreshToken, {
-//         httpOnly: true,
-//         sameSite: 'lax'
-//       })
-  
-//       res.status(200).json({
-//         access_token : accessToken,
-//         tokenType : 'Bearer',
-//         status: 200,
-//         message: 'Login success' + accessToken + " Refresh - : " + refreshToken
-//       })
-  
-//     } catch (err) {
-//       if (err instanceof Error && err.msBeforeNext) {
-//         const retryAfter = Math.ceil(err.msBeforeNext / 1000 / 60);
-//         return next(
-//           createError(
-//             409,
-//             `Too many attempts. Try again in ${retryAfter} minutes.`
-//           )
-//         ); // Replace with invalid user / pass
-//       }
-//       const retryAfter = Math.ceil(err.msBeforeNext / 1000 / 60);
-//       return next(
-//         createError(
-//           409,
-//           `Too many attempts. Try again in ${retryAfter} minutes.`
-//         )
-//       ); // Replace with invalid user / pass
-//     }
-// }
-
-// User Login Controller
 export const userLogin = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -145,15 +76,13 @@ export const userLogin = async (req, res, next) => {
   try {
     await loginLimiter.consume(ip);
 
-    // Generate new token version in Node.js instead of DB
     const newTokenVersion = uuidv4();
 
-    // Update token version and get user in one query
     const { rows } = await pool.query(
-      `UPDATE users 
-             SET token_version = $1
-             WHERE username = $2
-             RETURNING id, username, password, is_active`,
+      `UPDATE users
+       SET token_version = $1
+       WHERE username = $2
+       RETURNING id, username, password, role, is_active, token_version`,
       [newTokenVersion, username]
     );
 
@@ -166,7 +95,7 @@ export const userLogin = async (req, res, next) => {
     }
 
     const user = rows[0];
- 
+
     if (!user.is_active) {
       return next(createError(403, "Account is disabled"));
     }
@@ -176,72 +105,78 @@ export const userLogin = async (req, res, next) => {
       return next(createError(401, "Invalid credentials"));
     }
 
-    // Generate tokens
     const accessToken = jwt.sign(
       {
         user: {
           id: user.id,
           username: user.username,
+          role: user.role,
         },
         jti: uuidv4(),
       },
       process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
       {
         expiresIn: "15m",
-        issuer: "Kimaru", //process.env.JWT_ISSUER,
-        audience: "Kimaru", // process.env.JWT_AUDIENCE,
+        issuer: process.env.BACKEND_BASE_URL,
+        audience: process.env.FRONTEND_BASE_URL,
       }
     );
 
     const refreshToken = jwt.sign(
       {
-        user: { id: user.id },
+        user: {
+          id: user.id,
+        },
         tokenVersion: newTokenVersion,
         jti: uuidv4(),
       },
       process.env.JWT_REFRESH_TOKEN_SECRET_KEY,
       {
         expiresIn: "7d",
-        issuer: "Kimaru",  // process.env.JWT_ISSUER,
-        audience: "Kimaru", // process.env.JWT_AUDIENCE,
+        issuer: process.env.BACKEND_BASE_URL,
+        audience: process.env.FRONTEND_BASE_URL,
       }
     );
 
-    // Store refresh token with Node.js generated UUID
     const tokenId = uuidv4();
     await pool.query(
-      `INSERT INTO refresh_tokens 
-             (token_id, user_id, token, user_agent, ip_address, expires_at) 
-             VALUES ($1, $2, $3, $4, $5, NOW() + interval '7 days')`,
-      [
-        tokenId,
-        user.id,
-        await bcrypt.hash(refreshToken, 12), // Stronger hash
-        userAgent,
-        ip,
-      ]
+      `INSERT INTO refresh_tokens
+       (token_id, user_id, token, user_agent, ip_address, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NOW() + interval '7 days')`,
+      [tokenId, user.id, await bcrypt.hash(refreshToken, 12), userAgent, ip]
     );
 
-    // Set cookies
     const csrfToken = uuidv4();
-    res.cookie("XSRF-TOKEN", csrfToken, {
+
+    // Set cookies
+    res.cookie("access_token", accessToken, {
+      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 900000,
+      maxAge: 15 * 60 * 1000, // 15 minutes
     });
 
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      path: "/api/auth/refresh",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/auth/refresh",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    res.cookie("XSRF-TOKEN", csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000, // 15 minutes
     });
 
     res.status(200).json({
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: 900,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
       csrf_token: csrfToken,
     });
   } catch (err) {
@@ -262,54 +197,82 @@ export const refreshAccessToken = async (req, res, next) => {
   }
 
   try {
-    // 1. Verify token signature
     const decoded = jwt.verify(
       refreshToken,
       process.env.JWT_REFRESH_TOKEN_SECRET_KEY
     );
 
-    // 2. Check token in database (important for revocation)
-    const tokenRecord = await pool.query(
-      `SELECT revoked_at FROM refresh_tokens 
-             WHERE token_id = $1 AND user_id = $2`,
-      [decoded.jti, decoded.userId]
+    // Get user data including token_version
+    const userQuery = await pool.query(
+      `SELECT id, username, role, token_version FROM users WHERE id = $1`,
+      [decoded.user.id]
     );
 
-    // 3. Validate token status
-    if (!tokenRecord.rows.length || tokenRecord.rows[0].revoked_at) {
+    if (userQuery.rows.length === 0) {
       res.clearCookie("refresh_token");
+      res.clearCookie("access_token");
       return next(createError(403, "Invalid token"));
     }
 
-    // 4. Generate new access token with short expiry
+    const user = userQuery.rows[0];
+
+    // Verify token version matches
+    if (decoded.tokenVersion !== user.token_version) {
+      res.clearCookie("refresh_token");
+      res.clearCookie("access_token");
+      return next(createError(403, "Invalid token"));
+    }
+
+    // Check token in database
+    const tokenRecord = await pool.query(
+      `SELECT revoked_at FROM refresh_tokens 
+       WHERE token_id = $1 AND user_id = $2`,
+      [decoded.jti, decoded.user.id]
+    );
+
+    if (!tokenRecord.rows.length || tokenRecord.rows[0].revoked_at) {
+      res.clearCookie("refresh_token");
+      res.clearCookie("access_token");
+      return next(createError(403, "Invalid token"));
+    }
+
     const newAccessToken = jwt.sign(
       {
         user: {
-          id: decoded.user.id,
-          username: decoded.user.username,
+          id: user.id,
+          username: user.username,
+          role: user.role,
         },
-        jti: crypto.randomUUID(), // Unique identifier
-        scope: "access", // Token purpose
+        jti: uuidv4(),
       },
       process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
       {
         expiresIn: "15m",
-        issuer: "your-domain.com",
-        audience: "your-domain.com",
+        issuer: "Kimaru",
+        audience: "Kimaru",
       }
     );
 
-    // 5. Response with new token
-    res.json({
-      access_token: newAccessToken,
-      token_type: "Bearer",
-      expires_in: 15 * 60, // 15 minutes in seconds
+    // Set new access token in cookie
+    res.cookie("access_token", newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.status(200).json({
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
     });
   } catch (err) {
     res.clearCookie("refresh_token");
+    res.clearCookie("access_token");
 
     if (err.name === "TokenExpiredError") {
-      // 6. Automatic cleanup of expired tokens
       await pool.query(
         "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_id = $1",
         [decoded?.jti]
@@ -321,6 +284,44 @@ export const refreshAccessToken = async (req, res, next) => {
   }
 };
 
+// Get LoggedIn user
+export const getLoggedInUser = async (req, res, next) => {
+  try {
+    const userId = req.user?.user?.id; // Comes from decoded JWT payload
+
+    if (!userId) {
+      return next(createError(401, "Unauthorized access"));
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, username, role, is_active, created_at 
+       FROM users 
+       WHERE id = $1`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return next(createError(404, "User not found"));
+    }
+
+    const user = rows[0];
+
+    if (!user.is_active) {
+      return next(createError(403, "Account is disabled"));
+    }
+
+    res.status(200).json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      is_active: user.is_active,
+      created_at: user.created_at,
+    });
+  } catch (err) {
+    console.log(err)
+    next(createError(500, "Failed to fetch user info"));
+  }
+};
 
 // Helper: revoke token family recursively
 const revokeTokenFamily = async (tokenId) => {
@@ -370,12 +371,27 @@ export const userLogout = async (req, res, next) => {
 
         await pool.query('COMMIT');
 
-        // 3. Clear the refresh token cookie
+        // 3. Clear the refresh and access token cookie
+        res.clearCookie('access_token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/', // MUST match path used when setting the cookie
+        });
+
         res.clearCookie('refresh_token', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            path: '/api/auth/refresh', // MUST match path used when setting the cookie
+            path: '/auth/refresh', // MUST match path used when setting the cookie
+        });
+
+        // Clear XSRF-TOKEN 
+        res.clearCookie('XSRF-TOKEN', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/', // MUST match path used when setting the cookie
         });
 
         // Optional: force-expire cookie just in case
@@ -383,7 +399,7 @@ export const userLogout = async (req, res, next) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            path: '/api/auth/refresh',
+            path: '/auth/refresh',
             expires: new Date(0),
         });
 
@@ -396,7 +412,6 @@ export const userLogout = async (req, res, next) => {
 
     } catch (err) {
         await pool.query('ROLLBACK');
-        console.error('Logout failed:', err);
         next(createError(500, 'Logout failed'));
     }
 };
