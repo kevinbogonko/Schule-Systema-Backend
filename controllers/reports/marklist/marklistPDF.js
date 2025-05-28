@@ -109,7 +109,7 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
       .fillColor("black")
       .font("Times-Bold")
       .fontSize(12)
-      .text(`MARKSHEET - ${response.schoolDetails.exam || ""}`, 20, y, {
+      .text(`MARKLIST - ${response.schoolDetails.exam || ""}`, 20, y, {
         align: "center",
         width: backgroundWidth,
       });

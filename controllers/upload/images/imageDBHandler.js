@@ -32,7 +32,7 @@ export const saveImageToDB = async ({
         throw createError(400, "Missing student data.");
       }
 
-      const imagesTable = `student_form_${form}_images`;
+      const imagesTable = `student_images`;
       const validTableName = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(imagesTable);
       if (!validTableName) {
         throw createError(400, "Invalid table name constructed from form.");
@@ -51,9 +51,10 @@ export const saveImageToDB = async ({
       // Insert or update student image
       await pool.query(
         `
-        INSERT INTO ${imagesTable} (id, year, filename, path, folder, file_hash, uploaded_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO ${imagesTable} (id, current_form, year, filename, path, folder, file_hash, uploaded_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (id) DO UPDATE SET
+          current_form = EXCLUDED.current_form,
           year = EXCLUDED.year,
           filename = EXCLUDED.filename,
           path = EXCLUDED.path,
@@ -61,7 +62,7 @@ export const saveImageToDB = async ({
           file_hash = EXCLUDED.file_hash,
           uploaded_at = EXCLUDED.uploaded_at
         `,
-        [id, year, filename, path, folder, file_hash, uploaded_at]
+        [id, form, year, filename, path, folder, file_hash, uploaded_at]
       );
     } else if (folder === "teacher_photo") {
       const { id } = bodyData;

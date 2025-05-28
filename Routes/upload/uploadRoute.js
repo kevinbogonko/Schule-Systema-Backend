@@ -3,7 +3,7 @@ import {
   uploadImage,
   uploadMultipleImages,
 } from "../../controllers/upload/images/uploadController.js";
-import upload, { uploadMultiple, uploadSingle } from "../../config/uploadMiddleware.js";
+import { uploadMultiple, uploadSingle } from "../../config/uploadMiddleware.js";
 
 const router = express.Router();
 

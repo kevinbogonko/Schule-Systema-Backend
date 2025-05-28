@@ -35,13 +35,7 @@ export const getStudentPhoto = async (req, res, next) => {
       }
 
       // Construct table name safely
-      const studentImageTable = `student_form_${sanitizedForm}_images`;
-
-      // Validate table name pattern to prevent SQL injection
-      const validTablePattern = /^student_form_[a-z0-9_]_images{1,50}$/i;
-      if (!validTablePattern.test(studentImageTable)) {
-        return next(createError(400, "Invalid table name format"));
-      }
+      const studentImageTable = `student_images`;
 
       // Query the database with parameterized query
       const queryText = `SELECT path FROM ${studentImageTable} WHERE id = $1`;

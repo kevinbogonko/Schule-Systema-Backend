@@ -1,1172 +1,1279 @@
 import pool from "../../config/db_connection.js";
 import { createError } from "../../utils/ErrorHandler.js";
 import { sanitizeStringVariables } from "../../utils/sanitizeString.js";
-import {studentReportMarks} from "../reports/reportform/studentReport.js"
+import { studentReportMarks } from "../reports/reportform/studentReport.js";
 import path from "path";
+import xlsx from "xlsx"
 
 // Get Results for All Students with a POST request
 export const getAllStudentsMarks = async (req, res, next) => {
-    // Validate request content type first
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'))
-    }
+  // Validate request content type first
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
 
-    // Get parameters from request body
-    const { exam_name, term, form, year} = req.body
-    
-    try {
-        // Validate input more thoroughly
-        if (!term || !form || !year || !exam_name) return next(createError(400, 'Missing required parameters!'))
+  // Get parameters from request body
+  const { exam_name, term, form, year } = req.body;
 
-        // More strict sanitization
-        const sanitizedExamName = sanitizeStringVariables(exam_name)
-        const sanitizedTerm = sanitizeStringVariables(term)
-        const sanitizedForm = sanitizeStringVariables(form)
-        const sanitizedYear = sanitizeStringVariables(year)
+  try {
+    // Validate input more thoroughly
+    if (!term || !form || !year || !exam_name)
+      return next(createError(400, "Missing required parameters!"));
 
-        // Validate inputs against stricter regex pattern
-        const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validPattern.test(sanitizedExamName) || 
-            !validPattern.test(sanitizedTerm) || 
-            !validPattern.test(sanitizedForm) || 
-            !validPattern.test(sanitizedYear))
-        return next(createError(400, "Invalid inputs!"))
+    // More strict sanitization
+    const sanitizedExamName = sanitizeStringVariables(exam_name);
+    const sanitizedTerm = sanitizeStringVariables(term);
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-        // Check for SQL injection patterns (basic example)
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i
-        if (sqlInjectionPattern.test(sanitizedExamName)) return next(createError(400, "Invalid input detected"))
+    // Validate inputs against stricter regex pattern
+    const validPattern = /^[a-z0-9_]+$/i; // Case insensitive, only alphanumeric + underscore
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedTerm) ||
+      !validPattern.test(sanitizedForm) ||
+      !validPattern.test(sanitizedYear)
+    )
+      return next(createError(400, "Invalid inputs!"));
 
-        // Get active subjects first
-        const subjectsTable = `subjects_form_${sanitizedForm}`
-        const activeSubjects = await pool.query(
-            `SELECT id FROM ${subjectsTable} WHERE status = 1`
-        )
+    // Check for SQL injection patterns (basic example)
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName))
+      return next(createError(400, "Invalid input detected"));
 
-        if (activeSubjects.rows.length === 0) return next(createError(404, 'No active subjects found for this form'))
+    // Get active subjects first
+    const subjectsTable = `subjects_form_${sanitizedForm}`;
+    const activeSubjects = await pool.query(
+      `SELECT id FROM ${subjectsTable} WHERE status = 1`
+    );
 
-        const subjectIds = activeSubjects.rows.map(subject => subject.id)
-        const subjectColumns = subjectIds.map(id => `m."${id}"`).join(', ')
+    if (activeSubjects.rows.length === 0)
+      return next(createError(404, "No active subjects found for this form"));
 
-        const examTermTable = `${sanitizedExamName}_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`
-        const studentsTable = `students_form_${sanitizedForm}`
+    const subjectIds = activeSubjects.rows.map((subject) => subject.id);
+    const subjectColumns = subjectIds.map((id) => `m."${id}"`).join(", ");
 
-        // Use parameterized query for all values
-        const query = `
+    const examTermTable = `${sanitizedExamName}_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`;
+
+    // Modified: Use students table with current_form and current_year conditions
+    const query = `
             SELECT 
                 m.id,
                 s.name,
                 ${subjectColumns}
             FROM ${examTermTable} AS m
-            JOIN ${studentsTable} AS s ON m.id = s.id
-        `
+            JOIN students AS s ON m.id = s.id
+            WHERE s.current_form = $1 AND s.current_year = $2
+        `;
 
-        // Execute query with transaction for safety
-        const client = await pool.connect()
-        try {
-            await client.query('BEGIN')
-            
-            const result = await client.query(query)
-            
-            await client.query('COMMIT')
-            
-            if (result.rows.length === 0) {
-                return res.status(404).json({ 
-                    status: 404,
-                    message: 'Students marks not found' 
-                })
-            }
+    // Execute query with transaction for safety
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-            const formattedResults = result.rows.map(row => ({
-                student_id: row.id,
-                student_name: row.name,
-                marks: Object.fromEntries(
-                    subjectIds.map(id => [id, row[id] ?? null])
-                )
-            }))
+      const result = await client.query(query, [sanitizedForm, sanitizedYear]);
 
-            res.status(200).json({
-                status: 200,
-                data: formattedResults
-            })
+      await client.query("COMMIT");
 
-        } catch (err) {
-            await client.query('ROLLBACK')
-            throw err
-        } finally {
-            client.release()
-        }
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          status: 404,
+          message: "Students marks not found",
+        });
+      }
 
-    } catch(err) {
-        if (err.code === '42P01') {
-            return next(createError(404, 'Exam or student data not found for the provided inputs'))
-        }
-        
-        next(createError(500, 'An error occurred while processing your request'))
+      const formattedResults = result.rows.map((row) => ({
+        student_id: row.id,
+        student_name: row.name,
+        marks: Object.fromEntries(
+          subjectIds.map((id) => [id, row[id] ?? null])
+        ),
+      }));
+
+      res.status(200).json({
+        status: 200,
+        data: formattedResults,
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-}
+  } catch (err) {
+    if (err.code === "42P01") {
+      return next(
+        createError(
+          404,
+          "Exam or student data not found for the provided inputs"
+        )
+      );
+    }
+
+    next(createError(500, "An error occurred while processing your request"));
+  }
+};
 
 // Get Results for Specific Students with a POST request
 export const getStudentMarks = async (req, res, next) => {
-    // Validate request content type first
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'))
-    }
+  // Validate request content type first
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
 
-    // Get parameters from request body
-    const { exam_name, term, form, year, student_id } = req.body
-    
-    try {
-        // Validate input more thoroughly
-        if (!term || !form || !year || !student_id || !exam_name) return next(createError(400, 'Missing required parameters!'))
+  // Get parameters from request body
+  const { exam_name, term, form, year, student_id } = req.body;
 
-        // Validate student_id is numeric
-        if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0) return next(createError(400, 'Invalid student ID: must be a positive integer'))
+  try {
+    // Validate input more thoroughly
+    if (!term || !form || !year || !student_id || !exam_name)
+      return next(createError(400, "Missing required parameters!"));
 
-        // More strict sanitization
-        const sanitizedExamName = sanitizeStringVariables(exam_name)
-        const sanitizedTerm = sanitizeStringVariables(term)
-        const sanitizedForm = sanitizeStringVariables(form)
-        const sanitizedYear = sanitizeStringVariables(year)
+    // Validate student_id is numeric
+    if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0)
+      return next(
+        createError(400, "Invalid student ID: must be a positive integer")
+      );
 
-        // Validate inputs against stricter regex pattern
-        const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validPattern.test(sanitizedExamName) || 
-            !validPattern.test(sanitizedTerm) || 
-            !validPattern.test(sanitizedForm) || 
-            !validPattern.test(sanitizedYear))
-        return next(createError(400, "Invalid inputs!"))
+    // More strict sanitization
+    const sanitizedExamName = sanitizeStringVariables(exam_name);
+    const sanitizedTerm = sanitizeStringVariables(term);
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-        // Check for SQL injection patterns (basic example)
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i
-        if (sqlInjectionPattern.test(sanitizedExamName)) return next(createError(400, "Invalid input detected"))
+    // Validate inputs against stricter regex pattern
+    const validPattern = /^[a-z0-9_]+$/i; // Case insensitive, only alphanumeric + underscore
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedTerm) ||
+      !validPattern.test(sanitizedForm) ||
+      !validPattern.test(sanitizedYear)
+    )
+      return next(createError(400, "Invalid inputs!"));
 
-        // Get active subjects first
-        const subjectsTable = `subjects_form_${sanitizedForm}`
-        const activeSubjects = await pool.query(
-            `SELECT id FROM ${subjectsTable} WHERE status = 1`
-        )
+    // Check for SQL injection patterns (basic example)
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName))
+      return next(createError(400, "Invalid input detected"));
 
-        if (activeSubjects.rows.length === 0) return next(createError(404, 'No active subjects found for this form'))
+    // Get active subjects first
+    const subjectsTable = `subjects_form_${sanitizedForm}`;
+    const activeSubjects = await pool.query(
+      `SELECT id FROM ${subjectsTable} WHERE status = 1`
+    );
 
-        const subjectIds = activeSubjects.rows.map(subject => subject.id)
-        const subjectColumns = subjectIds.map(id => `m."${id}"`).join(', ')
+    if (activeSubjects.rows.length === 0)
+      return next(createError(404, "No active subjects found for this form"));
 
-        const examTermTable = `${sanitizedExamName}_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`
-        const studentsTable = `students_form_${sanitizedForm}`
+    const subjectIds = activeSubjects.rows.map((subject) => subject.id);
+    const subjectColumns = subjectIds.map((id) => `m."${id}"`).join(", ");
 
-        // Use parameterized query for all values
-        const query = `
+    const examTermTable = `${sanitizedExamName}_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`;
+
+    // Modified: Use students table with current_form and current_year conditions
+    const query = `
             SELECT 
                 m.id,
                 s.name,
                 ${subjectColumns}
             FROM ${examTermTable} AS m
-            JOIN ${studentsTable} AS s ON m.id = s.id
-            WHERE m.id = $1
-        `
+            JOIN students AS s ON m.id = s.id
+            WHERE m.id = $1 AND s.current_form = $2 AND s.current_year = $3
+        `;
 
-        // Execute query with transaction for safety
-        const client = await pool.connect()
-        try {
-            await client.query('BEGIN')
-            
-            const result = await client.query(query, [student_id])
-            
-            await client.query('COMMIT')
-            
-            if (result.rows.length === 0) {
-                return res.status(404).json({ 
-                    status: 404,
-                    message: 'Student marks not found' 
-                })
-            }
-            
-            // Transform the result to a more structured format
-            const formattedResult = {
-                student_id: result.rows[0].id,
-                student_name: result.rows[0].name,
-                marks: {}
-            }
-
-            subjectIds.forEach(id => {
-                formattedResult.marks[`${id}`] = result.rows[0][`${id}`]
-            })
-
-            res.status(200).json({
-                status: 200,
-                data: formattedResult
-            })
-
-        } catch (err) {
-            await client.query('ROLLBACK')
-            throw err
-        } finally {
-            client.release()
-        }
-
-    } catch(err) {
-        if (err.code === '42P01') {
-            return next(createError(404, 'Exam or student data not found for the provided inputs'))
-        }
-        
-        next(createError(500, 'An error occurred while processing your request'))
-    }
-}
-
-// // Update results for specific Student with a PUT request
-export const updateStudentMark = async (req, res, next) => {
-
-    // Validate request content type first
-    if (!req.is('application/json')) return next(createError(415, 'Unsupported Media Type: Expected application/json'))
-
-    // Get parameters from request body
-    const { exam_name, term, form, year, results, student_id } = req.body
-
+    // Execute query with transaction for safety
+    const client = await pool.connect();
     try {
-        if (!term || !form || !year || !student_id || !exam_name ||!results) return next(createError(400, 'Missing required parameters!'))
+      await client.query("BEGIN");
 
-        // Validate student_id is numeric
-        if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0) return next(createError(400, 'Invalid student ID: must be a positive integer'))
+      const result = await client.query(query, [
+        student_id,
+        sanitizedForm,
+        sanitizedYear,
+      ]);
 
-        // More strict sanitization
-        const sanitizedExamName = sanitizeStringVariables(exam_name)
-        const sanitizedTerm = sanitizeStringVariables(term)
-        const sanitizedForm = sanitizeStringVariables(form)
-        const sanitizedYear = sanitizeStringVariables(year)
+      await client.query("COMMIT");
 
-        // Validate inputs against stricter regex pattern
-        const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validPattern.test(sanitizedExamName) || 
-            !validPattern.test(sanitizedTerm) || 
-            !validPattern.test(sanitizedForm) || 
-            !validPattern.test(sanitizedYear))
-        return next(createError(400, "Invalid inputs!"))
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          status: 404,
+          message: "Student marks not found",
+        });
+      }
 
-        // Handle results(marks)
-        if (typeof results !== 'object' || results === null) next(createError(400, 'Results must be an object'))
+      // Transform the result to a more structured format
+      const formattedResult = {
+        student_id: result.rows[0].id,
+        student_name: result.rows[0].name,
+        marks: {},
+      };
 
-        // Process results and prepare query
-        const columns = Object.keys(results)
-        const values = Object.values(results)
-        
-        // Validate each result value
-        for (const [key, value] of Object.entries(results)) {
-            if (isNaN(value) || value === '') next(createError(400, `Invalid mark value for subject code ${key}`))
-            
-            const numericValue = parseFloat(value)
-            if (numericValue < 0 || numericValue > 99) next(createError(400, `Mark for subject code ${key} must be between 0 and 99`))
-        }
+      subjectIds.forEach((id) => {
+        formattedResult.marks[`${id}`] = result.rows[0][`${id}`];
+      });
 
-        if (columns.length === 0) next(createError(400, 'No valid marks provided'))
-
-        // Check for SQL injection patterns (basic example)
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i
-        if (sqlInjectionPattern.test(sanitizedExamName)) return next(createError(400, "Invalid input detected"))
-        
-        // Exam Table
-        const examTermTable = `${sanitizedExamName}_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`
-
-        // Build dynamic SET clause
-        const setClause = columns
-            .map((col, index) => `"${col}" = $${index + 1}`)
-            .join(', ')
-
-        // Add student_id as the last parameter
-        const queryValues = [...values, student_id]
-        const studentParamIndex = queryValues.length // Position of student_id in params
-
-        // Update Student Mark
-        const query = {
-            text: `UPDATE "${examTermTable}" SET ${setClause} WHERE id = $${studentParamIndex} RETURNING *`,
-            values: queryValues,
-        }
-
-        // Execute query
-        const result = await pool.query(query)
-
-        if (result.rowCount === 0) next(createError(404, 'Student record not found'))
-
-        res.status(200).json({ 
-            status : 200,
-            // message: 'Results updated successfully' 
-            message : result.rows[0]
-        })
-
+      res.status(200).json({
+        status: 200,
+        data: formattedResult,
+      });
     } catch (err) {
-        next(err)
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-}
+  } catch (err) {
+    if (err.code === "42P01") {
+      return next(
+        createError(
+          404,
+          "Exam or student data not found for the provided inputs"
+        )
+      );
+    }
 
-// // Update results for specific Student with a PUT request
-// export const updateAllStudentMark = async (req, res, next) => {
+    next(createError(500, "An error occurred while processing your request"));
+  }
+};
 
-//     // Validate request content type first
-//     if (!req.is('application/json')) return next(createError(415, 'Unsupported Media Type: Expected application/json'))
+// Update results for specific Student with a PUT request
+export const updateStudentMark = async (req, res, next) => {
+  // Validate request content type first
+  if (!req.is("application/json"))
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
 
-//     // Get parameters from request body
-//     const { exam_name, results} = req.body
+  // Get parameters from request body
+  const { exam_name, term, form, year, results, student_id } = req.body;
 
-//     try {
-//         if (!exam_name ||!results) return next(createError(400, 'Missing required parameters!'))
+  try {
+    if (!term || !form || !year || !student_id || !exam_name || !results)
+      return next(createError(400, "Missing required parameters!"));
 
-//         // Validate student_id is numeric
-//         // if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0) return next(createError(400, 'Invalid student ID: must be a positive integer'))
+    // Validate student_id is numeric
+    if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0)
+      return next(
+        createError(400, "Invalid student ID: must be a positive integer")
+      );
 
-//         // More strict sanitization
-//         const sanitizedExamName = sanitizeStringVariables(exam_name)
-//         // const sanitizedTerm = sanitizeStringVariables(term)
-//         // const sanitizedForm = sanitizeStringVariables(form)
-//         // const sanitizedYear = sanitizeStringVariables(year)
+    // More strict sanitization
+    const sanitizedExamName = sanitizeStringVariables(exam_name);
+    const sanitizedTerm = sanitizeStringVariables(term);
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-//         // Validate inputs against stricter regex pattern
-//         const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-//         if (!validPattern.test(sanitizedExamName)
-//             // !validPattern.test(sanitizedTerm) || 
-//             // !validPattern.test(sanitizedForm) || 
-//             // !validPattern.test(sanitizedYear)
-//         )
-//         return next(createError(400, "Invalid inputs!"))
+    // Validate inputs against stricter regex pattern
+    const validPattern = /^[a-z0-9_]+$/i; // Case insensitive, only alphanumeric + underscore
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedTerm) ||
+      !validPattern.test(sanitizedForm) ||
+      !validPattern.test(sanitizedYear)
+    )
+      return next(createError(400, "Invalid inputs!"));
 
-//         // Handle results(marks)
-//         if (typeof results !== 'object' || results === null) next(createError(400, 'Results must be an object'))
+    // Handle results(marks)
+    if (typeof results !== "object" || results === null)
+      next(createError(400, "Results must be an object"));
 
-//         // Process results and prepare query
-//         const columns = Object.keys(results.map((item) => item.marks))
-//         const values = Object.values(results.map((item) => item.marks))
-        
-//         // Validate each result value
-//         for (const [key, value] of Object.entries(results)) {
-//             if (isNaN(value) || value === '') next(createError(400, `Invalid mark value for ${key}`))
-            
-//             const numericValue = parseFloat(value)
-//             if (numericValue < 0 || numericValue > 99) next(createError(400, `Mark for ${key} must be between 0 and 99`))
-//         }
+    // Process results and prepare query
+    const columns = Object.keys(results);
+    const values = Object.values(results);
 
-//         if (columns.length === 0) next(createError(400, 'No valid marks provided'))
+    // Validate each result value
+    for (const [key, value] of Object.entries(results)) {
+      if (isNaN(value) || value === "")
+        next(createError(400, `Invalid mark value for subject code ${key}`));
 
-//         // Check for SQL injection patterns (basic example)
-//         const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i
-//         if (sqlInjectionPattern.test(sanitizedExamName)) return next(createError(400, "Invalid input detected"))
-        
-//         // Exam Table
-//         const examTermTable = sanitizedExamName
+      const numericValue = parseFloat(value);
+      if (numericValue < 0 || numericValue > 99)
+        next(
+          createError(
+            400,
+            `Mark for subject code ${key} must be between 0 and 99`
+          )
+        );
+    }
 
-//         // Build dynamic SET clause
-//         const setClause = columns
-//             .map((col, index) => `"${col}" = $${index + 1}`)
-//             .join(', ')
+    if (columns.length === 0) next(createError(400, "No valid marks provided"));
 
-//         results.map((item) => {
-//             const student_id = item.id
-//             if (!exam_name ||!results) return next(createError(400, 'Missing required parameters!'))
+    // Check for SQL injection patterns (basic example)
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName))
+      return next(createError(400, "Invalid input detected"));
 
-//             // Validate student_id is numeric
-//             if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0) return next(createError(400, 'Invalid student ID: must be a positive integer'))
-        
-//             // Add student_id as the last parameter
-//             const queryValues = [...values, student_id]
-//             const studentParamIndex = queryValues.length // Position of student_id in params
+    // Exam Table
+    const examTermTable = `${sanitizedExamName}_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`;
 
-//             // Update Student Mark
-//             const query = {
-//                 text: `UPDATE "${examTermTable}" SET ${setClause} WHERE id = $${studentParamIndex} RETURNING *`,
-//                 values: queryValues,
-//             }
-            
-//         })
+    // Build dynamic SET clause
+    const setClause = columns
+      .map((col, index) => `"${col}" = $${index + 1}`)
+      .join(", ");
 
+    // Add student_id as the last parameter
+    const queryValues = [...values, student_id];
+    const studentParamIndex = queryValues.length; // Position of student_id in params
 
-//         // Execute query
-//         const result = await pool.query(query)
+    // Update Student Mark
+    const query = {
+      text: `UPDATE "${examTermTable}" SET ${setClause} WHERE id = $${studentParamIndex} RETURNING *`,
+      values: queryValues,
+    };
 
-//         if (result.rowCount === 0) next(createError(404, 'Student record not found'))
+    // Execute query
+    const result = await pool.query(query);
 
-//         res.status(200).json({ 
-//             status : 200,
-//             // message: 'Results updated successfully' 
-//             message : result.rows[0]
-//         })
+    if (result.rowCount === 0)
+      next(createError(404, "Student record not found"));
 
-//     } catch (err) {
-//         next(err)
-//     }
-// }
+    res.status(200).json({
+      status: 200,
+      message: result.rows[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 export const updateAllStudentMark = async (req, res, next) => {
-    if (!req.is("application/json")) {
-      return next(createError(415, "Unsupported Media Type: Expected application/json"));
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
+
+  const { exam_name, results } = req.body;
+
+  try {
+    if (!exam_name || !results || !Array.isArray(results)) {
+      return next(createError(400, "Missing or invalid required parameters!"));
     }
-  
-    const { exam_name, results } = req.body;
-  
+
+    const sanitizedExamName = sanitizeStringVariables(exam_name);
+
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (!validPattern.test(sanitizedExamName)) {
+      return next(createError(400, "Invalid exam name format!"));
+    }
+
+    const examTermTable = sanitizedExamName;
+
+    // Begin transaction
+    const client = await pool.connect();
     try {
-      if (!exam_name || !results || !Array.isArray(results)) {
-        return next(createError(400, "Missing or invalid required parameters!"));
-      }
-  
-      const sanitizedExamName = sanitizeStringVariables(exam_name);
-  
-      const validPattern = /^[a-z0-9_]+$/i;
-      if (!validPattern.test(sanitizedExamName)) {
-        return next(createError(400, "Invalid exam name format!"));
-      }
-  
-      const examTermTable = sanitizedExamName;
-  
-      // Begin transaction
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-  
-        for (const student of results) {
-          const student_id = student.id;
-          const marksObj = student.marks;
-  
-          if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0) {
-            throw createError(400, `Invalid student ID: ${student_id}`);
+      await client.query("BEGIN");
+
+      for (const student of results) {
+        const student_id = student.id;
+        const marksObj = student.marks;
+
+        if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0) {
+          throw createError(400, `Invalid student ID: ${student_id}`);
+        }
+
+        const markKeys = Object.keys(marksObj);
+        const markValues = Object.values(marksObj);
+
+        if (markKeys.length === 0) {
+          throw createError(
+            400,
+            `No marks provided for student ID: ${student_id}`
+          );
+        }
+
+        // Validation
+        for (const [col, val] of Object.entries(marksObj)) {
+          if (isNaN(val) || val === "") {
+            throw createError(
+              400,
+              `Invalid mark for student ${student_id}, column ${col}`
+            );
           }
-  
-          const markKeys = Object.keys(marksObj);
-          const markValues = Object.values(marksObj);
-  
-          if (markKeys.length === 0) {
-            throw createError(400, `No marks provided for student ID: ${student_id}`);
-          }
-  
-          // Validation
-          for (const [col, val] of Object.entries(marksObj)) {
-            if (isNaN(val) || val === '') {
-              throw createError(400, `Invalid mark for student ${student_id}, column ${col}`);
-            }
-            const numericValue = parseFloat(val);
-            if (numericValue < 0 || numericValue > 99) {
-              throw createError(400, `Mark for student ${student_id}, column ${col} must be between 0 and 99`);
-            }
-          }
-  
-          // Build SET clause dynamically
-          const setClause = markKeys.map((col, index) => `"${col}" = $${index + 1}`).join(", ");
-          const values = [...markValues, student_id]; // last param is the WHERE id
-  
-          const updateQuery = {
-            text: `UPDATE "${examTermTable}" SET ${setClause} WHERE id = $${values.length} RETURNING *`,
-            values,
-          };
-  
-          const updateResult = await client.query(updateQuery);
-  
-          if (updateResult.rowCount === 0) {
-            throw createError(404, `Student record not found for Reg No: ${student_id}`);
+          const numericValue = parseFloat(val);
+          if (numericValue < 0 || numericValue > 99) {
+            throw createError(
+              400,
+              `Mark for student ${student_id}, column ${col} must be between 0 and 99`
+            );
           }
         }
-  
-        await client.query("COMMIT");
 
-        // const allResults = await client.query(`SELECT * FROM "${examTermTable}"`)
+        // Build SET clause dynamically
+        const setClause = markKeys
+          .map((col, index) => `"${col}" = $${index + 1}`)
+          .join(", ");
+        const values = [...markValues, student_id]; // last param is the WHERE id
 
-        res.status(200).json({
-          status: 200,
-          message: "All student marks updated successfully",
-        //   updatedData : allResults.rows
-        });
-      } catch (transactionError) {
-        await client.query("ROLLBACK");
-        next(transactionError);
-      } finally {
-        client.release();
+        const updateQuery = {
+          text: `UPDATE "${examTermTable}" SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+          values,
+        };
+
+        const updateResult = await client.query(updateQuery);
+
+        if (updateResult.rowCount === 0) {
+          throw createError(
+            404,
+            `Student record not found for Reg No: ${student_id}`
+          );
+        }
       }
-    } catch (err) {
-      next(err);
+
+      await client.query("COMMIT");
+
+      res.status(200).json({
+        status: 200,
+        message: "All student marks updated successfully",
+      });
+    } catch (transactionError) {
+      await client.query("ROLLBACK");
+      next(transactionError);
+    } finally {
+      client.release();
     }
+  } catch (err) {
+    next(err);
+  }
 };
 
 // JUST FOR TEST
 // GET EXAM LIST
 export const examList = async (req, res, next) => {
-    // Validate request content type first
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'))
+  // Validate request content type first
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
+
+  // Get parameters from request body
+  const { form, term, year } = req.body;
+
+  try {
+    // Validate input more thoroughly
+    if (!form || !term || !year)
+      return next(createError(400, "Missing required parameters!"));
+    // More strict sanitization
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedTerm = sanitizeStringVariables(term);
+    const sanitizedYear = sanitizeStringVariables(year);
+
+    // Validate inputs against stricter regex pattern
+    const validFormPattern = /^[a-z0-9_]+$/i; // Case insensitive, only alphanumeric + underscore
+    if (
+      !validFormPattern.test(sanitizedForm) ||
+      !validFormPattern.test(sanitizedTerm) ||
+      !validFormPattern.test(sanitizedYear)
+    )
+      return next(createError(400, "Invalid Form input!"));
+
+    // Restrict table names to a predefined list
+    const allowedTables = [
+      "form_1_exams",
+      "form_2_exams",
+      "form_3_exams",
+      "form_4_exams",
+    ];
+
+    // Exam Table
+    const examTable = `form_${form}_exams`;
+
+    // Ensure the sanitized table name exists in allowed table list
+    if (!allowedTables.includes(examTable))
+      return next(createError(400, "Invalid form!"));
+
+    const result = await pool.query(
+      `SELECT * FROM ${examTable} WHERE year = $1 AND term = $2`,
+      [sanitizedYear, sanitizedTerm]
+    );
+
+    if (result.rows.length > 0) {
+      res.status(200).json(result.rows);
+    } else {
+      next(createError(404, "Exams not Found"));
     }
-
-    // Get parameters from request body
-    // const { form, term, year } = req.body
-    const { form, term, year } = req.body
-    
-    try {
-
-        // Validate input more thoroughly
-        if (!form || !term || !year) return next(createError(400, 'Missing required parameters!'))
-        // More strict sanitization
-        const sanitizedForm = sanitizeStringVariables(form)
-        const sanitizedTerm = sanitizeStringVariables(term)
-        const sanitizedYear = sanitizeStringVariables(year)
-    
-        // Validate inputs against stricter regex pattern
-        const validFormPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validFormPattern.test(sanitizedForm) ||
-            !validFormPattern.test(sanitizedTerm) ||
-            !validFormPattern.test(sanitizedYear)
-        ) return next(createError(400, "Invalid Form input!"))
-    
-        // Restrict table names to a predefined list
-        const allowedTables = ['form_1_exams', 'form_2_exams', 'form_3_exams', 'form_4_exams']
-
-        // Exam Table
-        const examTable = `form_${form}_exams`
-
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(examTable)) return next(createError(400, 'Invalid form!'))
-        
-        const result = await pool.query(`SELECT * FROM ${examTable} WHERE year = $1 AND term = $2`, [sanitizedYear, sanitizedTerm])
-        // const result = await pool.query(`SELECT * FROM ${exam_name}`)
-
-        if(result.rows.length > 0){
-            res.status(200).json(result.rows)
-        }else{
-            next(createError(404, 'Exams not Found'))
-        }
-
-    } catch (err) {
-        next(err)
-    }
-}
+  } catch (err) {
+    next(err);
+  }
+};
 
 // CHECK AND RETURN ACTIVE SUBJECTS IN EXAM MARK TABLE
 export const subjectExistInExamTable = async (req, res, next) => {
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'))
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
+
+  const { form, exam } = req.body;
+
+  let client;
+
+  try {
+    if (!form || !exam) {
+      return next(createError(400, "Missing required parameters!"));
     }
 
-    const { form, exam } = req.body
+    const sanitizedExamName = sanitizeStringVariables(exam);
+    const sanitizedForm = sanitizeStringVariables(form);
 
-    let client;
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedForm)
+    ) {
+      return next(createError(400, "Invalid inputs!"));
+    }
 
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName)) {
+      return next(createError(400, "Invalid input detected"));
+    }
+
+    const examTermTable = sanitizedExamName;
+    const subjectsTable = `subjects_form_${sanitizedForm}`;
+
+    client = await pool.connect();
     try {
-        if (!form || !exam) {
-            return next(createError(400, 'Missing required parameters!'))
-        }
+      await client.query("BEGIN");
 
-        const sanitizedExamName = sanitizeStringVariables(exam)
-        const sanitizedForm = sanitizeStringVariables(form)
+      // 1. Check if examTermTable exists
+      const examTableCheck = await client.query(
+        `SELECT to_regclass($1) AS exists`,
+        [examTermTable]
+      );
+      if (!examTableCheck.rows[0].exists) {
+        await client.query("ROLLBACK");
+        return next(
+          createError(404, `Exam table "${examTermTable}" does not exist.`)
+        );
+      }
 
-        const validPattern = /^[a-z0-9_]+$/i
-        if (!validPattern.test(sanitizedExamName) ||
-            !validPattern.test(sanitizedForm)) {
-            return next(createError(400, "Invalid inputs!"))
-        }
+      // 2. Get active subjects - now selecting both id and name
+      const subjectResult = await client.query(
+        `SELECT id::text, name FROM "${subjectsTable}" WHERE status = 1`
+      );
 
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i
-        if (sqlInjectionPattern.test(sanitizedExamName)) {
-            return next(createError(400, "Invalid input detected"))
-        }
+      if (subjectResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return next(createError(404, "No active subjects found."));
+      }
 
-        // const examTermTable = `${sanitizedExamName}_term_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`
-        const examTermTable = sanitizedExamName
-        const subjectsTable = `subjects_form_${sanitizedForm}`
+      const subjects = subjectResult.rows;
 
-        client = await pool.connect();
-        try {
-            await client.query('BEGIN')
-
-            // 1. Check if examTermTable exists
-            const examTableCheck = await client.query(
-                `SELECT to_regclass($1) AS exists`, [examTermTable]
-            )
-            if (!examTableCheck.rows[0].exists) {
-                await client.query('ROLLBACK')
-                return next(createError(404, `Exam table "${examTermTable}" does not exist.`))
-            }
-
-            // 2. Get active subjects - now selecting both id and name
-            const subjectResult = await client.query(
-                `SELECT id::text, name FROM "${subjectsTable}" WHERE status = 1`
-            )
-
-            if (subjectResult.rows.length === 0) {
-                await client.query('ROLLBACK')
-                return next(createError(404, "No active subjects found."))
-            }
-
-            const subjects = subjectResult.rows
-
-            // 3. Get columns from examTermTable
-            const columnResult = await client.query(
-                `SELECT column_name FROM information_schema.columns 
+      // 3. Get columns from examTermTable
+      const columnResult = await client.query(
+        `SELECT column_name FROM information_schema.columns 
                  WHERE table_name = $1`,
-                [examTermTable.toLowerCase()]
-            )
-            const columnNames = columnResult.rows.map(row => row.column_name)
+        [examTermTable.toLowerCase()]
+      );
+      const columnNames = columnResult.rows.map((row) => row.column_name);
 
-            // 4. Filter subjects where the string version of the id exists in the table's columns
-            const validSubjects = subjects.filter(subject => {
-                // Check if either the subject name or the string version of the id exists in columns
-                return columnNames.includes(subject.id) || columnNames.includes(subject.name)
-            })
+      // 4. Filter subjects where the string version of the id exists in the table's columns
+      const validSubjects = subjects.filter((subject) => {
+        return (
+          columnNames.includes(subject.id) || columnNames.includes(subject.name)
+        );
+      });
 
-            if (validSubjects.length === 0) {
-                await client.query('ROLLBACK')
-                return next(createError(404, "No matching subjects found in exam table."))
-            }
+      if (validSubjects.length === 0) {
+        await client.query("ROLLBACK");
+        return next(
+          createError(404, "No matching subjects found in exam table.")
+        );
+      }
 
-            await client.query('COMMIT')
-            
-            // Return both id (as string) and name for valid subjects
-            const formattedSubjects = validSubjects.map(subject => ({
-                id: subject.id,  // Already converted to string in the query
-                name: subject.name
-            }))
+      await client.query("COMMIT");
 
-            res.status(200).json( formattedSubjects )
+      // Return both id (as string) and name for valid subjects
+      const formattedSubjects = validSubjects.map((subject) => ({
+        id: subject.id,
+        name: subject.name,
+      }));
 
-        } catch (queryErr) {
-            await client.query('ROLLBACK')
-            return next(createError(500, "Database transaction failed."))
-        }
-    } catch (err) {
-        return next(createError(500, "Internal Server Error"))
-    } finally {
-        if (client) {
-            client.release();
-        }
+      res.status(200).json(formattedSubjects);
+    } catch (queryErr) {
+      await client.query("ROLLBACK");
+      return next(createError(500, "Database transaction failed."));
     }
-}
+  } catch (err) {
+    return next(createError(500, "Internal Server Error"));
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
 
 // GET STUDENT MARKS FOR CERTAIN SUBJECT
 export const ExamSubjectMarks = async (req, res, next) => {
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'));
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
+
+  const { form, exam, subject } = req.body;
+
+  try {
+    if (!form || !exam || !subject) {
+      return next(createError(400, "Missing required parameters!"));
     }
 
-    const { form, exam, subject } = req.body;
+    const sanitizedExamName = sanitizeStringVariables(exam);
+    const sanitizedSubject = sanitizeStringVariables(subject);
+    const sanitizedForm = sanitizeStringVariables(form);
 
-    try {
-        if (!form || !exam || !subject) {
-            return next(createError(400, 'Missing required parameters!'));
-        }
-
-        const sanitizedExamName = sanitizeStringVariables(exam);
-        const sanitizedSubject = sanitizeStringVariables(subject);
-        const sanitizedForm = sanitizeStringVariables(form);
-
-        const validPattern = /^[a-z0-9_]+$/i;
-        if (!validPattern.test(sanitizedExamName) ||
-            !validPattern.test(sanitizedSubject) ||
-            !validPattern.test(sanitizedForm)) {
-            return next(createError(400, "Invalid inputs!"));
-        }
-
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
-        if (sqlInjectionPattern.test(sanitizedExamName)) {
-            return next(createError(400, "Invalid input detected"));
-        }
-
-        const examTermTable = sanitizedExamName;
-        const studentsTable = `students_form_${sanitizedForm}`;
-
-        // Determine subject columns based on form
-        let formattedSubject;
-        if (sanitizedForm === '3' || sanitizedForm === '4') {
-            formattedSubject = `"${sanitizedSubject}", "${sanitizedSubject}_1", "${sanitizedSubject}_2", "${sanitizedSubject}_3"`;
-        } else {
-            formattedSubject = `"${sanitizedSubject}"`;
-        }
-
-        // Build the SQL query dynamically
-        const resultQuery = `
-            SELECT 
-                m.id,
-                s.fname,
-                s.lname,
-                ${formattedSubject}
-            FROM ${examTermTable} AS m
-            JOIN ${studentsTable} AS s ON m.id = s.id
-        `;
-
-        const result = await pool.query(resultQuery);
-
-        if (result.rows.length > 0) {
-            res.status(200).json(result.rows);
-        } else {
-            next(createError(404, 'Subject Marks not Found'));
-        }
-
-    } catch (err) {
-        next(err);
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedSubject) ||
+      !validPattern.test(sanitizedForm)
+    ) {
+      return next(createError(400, "Invalid inputs!"));
     }
+
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName)) {
+      return next(createError(400, "Invalid input detected"));
+    }
+
+    const examTermTable = sanitizedExamName;
+
+    // 1. Check if the exam table exists
+    const tableExists = await pool.query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)`,
+      [examTermTable.toLowerCase()]
+    );
+
+    if (!tableExists.rows[0].exists) {
+      return next(createError(404, "Exam table not found"));
+    }
+
+    // 2. Check if the main subject column exists
+    const mainColumnExists = await pool.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.columns 
+        WHERE table_name = $1 
+        AND column_name = $2
+      )`,
+      [examTermTable.toLowerCase(), sanitizedSubject]
+    );
+
+    if (!mainColumnExists.rows[0].exists) {
+      return next(
+        createError(404, `Subject column ${sanitizedSubject} not found`)
+      );
+    }
+
+    // 3. Find all paper columns for this subject
+    const paperColumnsRes = await pool.query(
+      `SELECT column_name 
+       FROM information_schema.columns 
+       WHERE table_name = $1 
+       AND column_name LIKE $2
+       ORDER BY column_name`,
+      [examTermTable.toLowerCase(), `${sanitizedSubject}_%`]
+    );
+
+    const paperColumns = paperColumnsRes.rows.map((row) => row.column_name);
+
+    // 4. Build the query with all required columns
+    const selectColumns = [
+      "m.id",
+      "s.fname",
+      "s.lname",
+      `m."${sanitizedSubject}"`, // Main subject column
+      ...paperColumns.map((col) => `m."${col}"`), // All paper columns
+    ];
+
+    const query = `
+      SELECT ${selectColumns.join(", ")}
+      FROM ${examTermTable} AS m
+      JOIN students AS s ON m.id = s.id
+      WHERE s.current_form = $1
+      ORDER BY s.fname, s.lname
+    `;
+
+    const result = await pool.query(query, [sanitizedForm]);
+
+    if (result.rows.length > 0) {
+      // Transform the result to ensure consistent field names
+      const transformedResults = result.rows.map((row) => {
+        const transformed = {
+          id: row.id,
+          fname: row.fname,
+          lname: row.lname,
+          [sanitizedSubject]: row[sanitizedSubject] || 0,
+        };
+
+        // Add all paper columns
+        paperColumns.forEach((col) => {
+          transformed[col] = row[col] || 0;
+        });
+
+        return transformed;
+      });
+
+      res.status(200).json(transformedResults);
+    } else {
+      next(createError(404, "No student marks found for this subject"));
+    }
+  } catch (err) {
+    next(err);
+  }
 };
 
 // EXAM PAPER SETUP FOR ALL SUBJECTS- (PAPER 1, 2, 3)
 export const allPaperSetup = async (req, res, next) => {
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'));
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
+
+  const { form, exam } = req.body;
+
+  try {
+    if (!exam || !form) {
+      return next(createError(400, "Missing required parameters!"));
     }
 
-    const { form, exam } = req.body;
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedExamName = sanitizeStringVariables(exam);
 
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedForm)
+    ) {
+      return next(createError(400, "Invalid inputs!"));
+    }
+
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName)) {
+      return next(createError(400, "Invalid input detected"));
+    }
+
+    const allowedSubjectTables = [
+      "subjects_form_1",
+      "subjects_form_2",
+      "subjects_form_3",
+      "subjects_form_4",
+    ];
+    const subjectsTable = `subjects_form_${sanitizedForm}`;
+    if (!allowedSubjectTables.includes(subjectsTable)) {
+      return next(createError(400, "Invalid form!"));
+    }
+
+    const paperSetupTable = `${sanitizedExamName}_paper_setup`;
+
+    // Begin transaction
+    const client = await pool.connect();
     try {
-        if (!exam || !form) {
-            return next(createError(400, 'Missing required parameters!'));
-        }
+      await client.query("BEGIN");
 
-        const sanitizedForm = sanitizeStringVariables(form);
-        const sanitizedExamName = sanitizeStringVariables(exam);
+      const subjectQuery = `SELECT id FROM ${subjectsTable} WHERE status = $1`;
+      const subjectResult = await client.query(subjectQuery, [1]);
 
-        const validPattern = /^[a-z0-9_]+$/i;
-        if (!validPattern.test(sanitizedExamName) || !validPattern.test(sanitizedForm)) {
-            return next(createError(400, "Invalid inputs!"));
-        }
+      if (!subjectResult.rows.length) {
+        await client.query("ROLLBACK");
+        return next(createError(404, "No matching subjects found."));
+      }
 
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
-        if (sqlInjectionPattern.test(sanitizedExamName)) {
-            return next(createError(400, "Invalid input detected"));
-        }
+      const subjectIds = subjectResult.rows.map((row) => row.id);
 
-        const allowedSubjectTables = ['subjects_form_1', 'subjects_form_2', 'subjects_form_3', 'subjects_form_4'];
-        const subjectsTable = `subjects_form_${sanitizedForm}`;
-        if (!allowedSubjectTables.includes(subjectsTable)) {
-            return next(createError(400, 'Invalid form!'));
-        }
+      const paperQuery = `SELECT * FROM ${paperSetupTable} WHERE id = ANY($1)`;
+      const paperResult = await client.query(paperQuery, [subjectIds]);
 
-        const paperSetupTable = `${sanitizedExamName}_paper_setup`;
+      await client.query("COMMIT");
 
-        // Begin transaction
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            const subjectQuery = `SELECT id FROM ${subjectsTable} WHERE status = $1`;
-            const subjectResult = await client.query(subjectQuery, [1]);
-
-            if (!subjectResult.rows.length) {
-                await client.query('ROLLBACK');
-                return next(createError(404, 'No matching subjects found.'));
-            }
-
-            const subjectIds = subjectResult.rows.map(row => row.id);
-
-            const paperQuery = `SELECT * FROM ${paperSetupTable} WHERE id = ANY($1)`;
-            const paperResult = await client.query(paperQuery, [subjectIds]);
-
-            await client.query('COMMIT');
-
-            return res.status(200).json(paperResult.rows );
-        } catch (err) {
-            await client.query('ROLLBACK');
-            return next(createError(500, 'Failed during paper setup query.'));
-        } finally {
-            client.release();
-        }
-
+      return res.status(200).json(paperResult.rows);
     } catch (err) {
-        return next(createError(500, 'Server error'));
+      await client.query("ROLLBACK");
+      return next(createError(500, "Failed during paper setup query."));
+    } finally {
+      client.release();
     }
+  } catch (err) {
+    return next(createError(500, "Server error"));
+  }
 };
 
 // EXAM PAPER SETUP FOR ONE SUBJECT- (PAPER 1, 2, 3)
 export const paperSetup = async (req, res, next) => {
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'));
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
+
+  const { form, exam, subject } = req.body;
+
+  try {
+    if (!exam || !form || !subject) {
+      return next(createError(400, "Missing required parameters!"));
     }
 
-    const { form, exam, subject } = req.body;
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedExamName = sanitizeStringVariables(exam);
+    const sanitizedSubject = sanitizeStringVariables(subject);
 
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (
+      !validPattern.test(sanitizedExamName) ||
+      !validPattern.test(sanitizedForm) ||
+      !validPattern.test(sanitizedSubject)
+    ) {
+      return next(createError(400, "Invalid inputs!"));
+    }
+
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName)) {
+      return next(createError(400, "Invalid input detected"));
+    }
+
+    const allowedSubjectTables = [
+      "subjects_form_1",
+      "subjects_form_2",
+      "subjects_form_3",
+      "subjects_form_4",
+    ];
+    const subjectsTable = `subjects_form_${sanitizedForm}`;
+    if (!allowedSubjectTables.includes(subjectsTable)) {
+      return next(createError(400, "Invalid form!"));
+    }
+
+    const paperSetupTable = `${sanitizedExamName}_paper_setup`;
+
+    const client = await pool.connect();
     try {
-        if (!exam || !form || !subject) {
-            return next(createError(400, 'Missing required parameters!'));
-        }
+      await client.query("BEGIN");
 
-        const sanitizedForm = sanitizeStringVariables(form);
-        const sanitizedExamName = sanitizeStringVariables(exam);
-        const sanitizedSubject = sanitizeStringVariables(subject);
+      // 1. Check if subject ID exists in subjectsTable with status 1
+      const checkSubjectQuery = `SELECT id FROM ${subjectsTable} WHERE id = $1 AND status = 1`;
+      const checkSubjectResult = await client.query(checkSubjectQuery, [
+        sanitizedSubject,
+      ]);
 
-        const validPattern = /^[a-z0-9_]+$/i;
-        if (!validPattern.test(sanitizedExamName) || !validPattern.test(sanitizedForm) || !validPattern.test(sanitizedSubject)) {
-            return next(createError(400, "Invalid inputs!"));
-        }
+      if (!checkSubjectResult.rows.length) {
+        await client.query("ROLLBACK");
+        return next(createError(404, "Subject not found or inactive."));
+      }
 
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
-        if (sqlInjectionPattern.test(sanitizedExamName)) {
-            return next(createError(400, "Invalid input detected"));
-        }
+      // 2. Fetch corresponding record from paperSetupTable
+      const paperQuery = `SELECT * FROM ${paperSetupTable} WHERE id = $1`;
+      const paperResult = await client.query(paperQuery, [sanitizedSubject]);
 
-        const allowedSubjectTables = ['subjects_form_1', 'subjects_form_2', 'subjects_form_3', 'subjects_form_4'];
-        const subjectsTable = `subjects_form_${sanitizedForm}`;
-        if (!allowedSubjectTables.includes(subjectsTable)) {
-            return next(createError(400, 'Invalid form!'));
-        }
+      await client.query("COMMIT");
 
-        const paperSetupTable = `${sanitizedExamName}_paper_setup`;
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            // 1. Check if subject ID exists in subjectsTable with status 1
-            const checkSubjectQuery = `SELECT id FROM ${subjectsTable} WHERE id = $1 AND status = 1`;
-            const checkSubjectResult = await client.query(checkSubjectQuery, [sanitizedSubject]);
-
-            if (!checkSubjectResult.rows.length) {
-                await client.query('ROLLBACK');
-                return next(createError(404, 'Subject not found or inactive.'));
-            }
-
-            // 2. Fetch corresponding record from paperSetupTable
-            const paperQuery = `SELECT * FROM ${paperSetupTable} WHERE id = $1`;
-            const paperResult = await client.query(paperQuery, [sanitizedSubject]);
-
-            await client.query('COMMIT');
-
-            return res.status(200).json(paperResult.rows);
-        } catch (err) {
-            await client.query('ROLLBACK');
-            return next(createError(500, 'Failed during paper setup query.'));
-        } finally {
-            client.release();
-        }
-
+      return res.status(200).json(paperResult.rows);
     } catch (err) {
-        return next(createError(500, 'Server error'));
+      await client.query("ROLLBACK");
+      return next(createError(500, "Failed during paper setup query."));
+    } finally {
+      client.release();
     }
+  } catch (err) {
+    return next(createError(500, "Server error"));
+  }
 };
 
 export const paperSetupUpdate = async (req, res, next) => {
-    if (!req.is('application/json')) {
-        return next(createError(415, 'Unsupported Media Type: Expected application/json'));
-    }
+  if (!req.is("application/json")) {
+    return next(
+      createError(415, "Unsupported Media Type: Expected application/json")
+    );
+  }
 
-    const { id, exam, results } = req.body;
-    try {
+  const { id, exam, results } = req.body;
+  try {
+    if (!id || !exam || !results)
+      return next(createError(400, "Missing required parameters!"));
 
-        if (!id || !exam ||!results) return next(createError(400, 'Missing required parameters!'))
+    // Validate student_id is numeric
+    if (!Number.isInteger(Number(id)) || Number(id) <= 0)
+      return next(
+        createError(400, "Invalid subject ID: must be a positive integer")
+      );
 
-        // Validate student_id is numeric
-        if (!Number.isInteger(Number(id)) || Number(id) <= 0) return next(createError(400, 'Invalid subject ID: must be a positive integer'))
+    // More strict sanitization
+    const sanitizedExamName = sanitizeStringVariables(exam);
 
-        // More strict sanitization
-        const sanitizedExamName = sanitizeStringVariables(exam)
+    // Validate inputs against stricter regex pattern
+    const validPattern = /^[a-z0-9_]+$/i; // Case insensitive, only alphanumeric + underscore
+    if (!validPattern.test(sanitizedExamName))
+      return next(createError(400, "Invalid inputs!"));
 
-        // Validate inputs against stricter regex pattern
-        const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validPattern.test(sanitizedExamName)) return next(createError(400, "Invalid inputs!"))
+    // Handle results(marks)
+    if (typeof results !== "object" || results === null)
+      next(createError(400, "Results must be an object"));
 
-        // Handle results(marks)
-        if (typeof results !== 'object' || results === null) next(createError(400, 'Results must be an object'))
+    // Process results and prepare query
+    const columns = Object.keys(results);
+    const values = Object.values(results);
 
-        // Process results and prepare query
-        const columns = Object.keys(results)
-        const values = Object.values(results)
+    // Check for SQL injection patterns (basic example)
+    const sqlInjectionPattern =
+      /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
+    if (sqlInjectionPattern.test(sanitizedExamName))
+      return next(createError(400, "Invalid input detected"));
 
-        // Check for SQL injection patterns (basic example)
-        const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i
-        if (sqlInjectionPattern.test(sanitizedExamName)) return next(createError(400, "Invalid input detected"))
+    const paperSetupTable = `${sanitizedExamName}_paper_setup`;
 
-        const paperSetupTable = `${sanitizedExamName}_paper_setup`
+    // Build dynamic SET clause
+    const setClause = columns
+      .map((col, index) => `"${col}" = $${index + 1}`)
+      .join(", ");
 
-        // Build dynamic SET clause
-        const setClause = columns
-            .map((col, index) => `"${col}" = $${index + 1}`)
-            .join(', ')
+    // Add subject id as the last parameter
+    const queryValues = [...values, id];
+    const paperSetupParamIndex = queryValues.length; // Position of subject id in params
 
-        // Add subject id as the last parameter
-        const queryValues = [...values, id]
-        const paperSetupParamIndex = queryValues.length // Position of subject id in params
+    // Update Student Mark
+    const query = {
+      text: `UPDATE "${paperSetupTable}" SET ${setClause} WHERE id = $${paperSetupParamIndex} RETURNING *`,
+      values: queryValues,
+    };
 
-        // Update Student Mark
-        const query = {
-            text: `UPDATE "${paperSetupTable}" SET ${setClause} WHERE id = $${paperSetupParamIndex} RETURNING *`,
-            values: queryValues,
-        }
+    // Execute query
+    const result = await pool.query(query);
 
-        // Execute query
-        const result = await pool.query(query)
+    if (result.rowCount === 0)
+      next(createError(404, "Student record not found"));
 
-        if (result.rowCount === 0) next(createError(404, 'Student record not found'))
-
-        res.status(200).json(result.rows[0])
-        
-    } catch (err) {
-        next(err)
-    }
-}
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
 
 // Process Marks for whole class/form
 export const procesMarks = async (req, res, next) => {
-    const { exam, form } = req.body;
-    
-    try {
-      
-      if (!exam || !form) {
-        return next(createError(400, "Invalid exam or form provided"));
-      }
-  
-      // Sanitize inputs
-      const sanitizedExam = sanitizeStringVariables(exam);
-      const sanitizedForm = sanitizeStringVariables(form);
+  const { exam, form } = req.body;
 
-      const examTable = sanitizedExam;
-      const subjectTable = `subjects_form_${sanitizedForm}`;
-      const studentsTable = `students_form_${sanitizedForm}`;
-      const gradingTable = `grading_${sanitizedExam}`;
+  try {
+    if (!exam || !form) {
+      return next(createError(400, "Invalid exam or form provided"));
+    }
 
-      const pointsScale = {
-        'E': 1,
-        'D-': 2,
-        'D': 3,
-        'D+': 4,
-        'C-': 5,
-        'C': 6,
-        'C+': 7,
-        'B-': 8,
-        'B': 9,
-        'B+': 10,
-        'A-': 11,
-        'A': 12
+    // Sanitize inputs
+    const sanitizedExam = sanitizeStringVariables(exam);
+    const sanitizedForm = sanitizeStringVariables(form);
+
+    const examTable = sanitizedExam;
+    const subjectTable = `subjects_form_${sanitizedForm}`;
+    const gradingTable = `grading_${sanitizedExam}`;
+
+    const pointsScale = {
+      E: 1,
+      "D-": 2,
+      D: 3,
+      "D+": 4,
+      "C-": 5,
+      C: 6,
+      "C+": 7,
+      "B-": 8,
+      B: 9,
+      "B+": 10,
+      "A-": 11,
+      A: 12,
+    };
+
+    // Define subject groups
+    const group_1 = [101, 102, 121, 122];
+    const group_2 = [231, 232, 233, 236, 237];
+    const group_3 = [311, 312, 313, 314, 315];
+    const group_4 = [
+      441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451, 501, 502, 503, 504,
+      511,
+    ];
+
+    // Step 1: Query subjects table to get all ids and initials with status = 1
+    const subjectsQuery = `SELECT id, init FROM ${subjectTable} WHERE status = 1`;
+    const subjectsResult = await pool.query(subjectsQuery);
+
+    if (subjectsResult.rows.length === 0) {
+      return next(createError(404, "No active subjects found"));
+    }
+
+    const activeSubjects = subjectsResult.rows.map((row) => row.id);
+    // Create a map of subject IDs to their initials
+    const subjectInitialsMap = {};
+    subjectsResult.rows.forEach((row) => {
+      subjectInitialsMap[row.id] = row.init;
+    });
+
+    // Step 2: Categorize active subjects into groups
+    const active_group_1 = group_1.filter((id) => activeSubjects.includes(id));
+    const active_group_2 = group_2.filter((id) => activeSubjects.includes(id));
+    const active_group_3 = group_3.filter((id) => activeSubjects.includes(id));
+    const active_group_4 = group_4.filter((id) => activeSubjects.includes(id));
+
+    // Check if we have at least one active subject in each required group
+    if (
+      active_group_1.length === 0 ||
+      active_group_2.length === 0 ||
+      active_group_3.length === 0 ||
+      active_group_4.length === 0
+    ) {
+      return next(
+        createError(
+          400,
+          "Insufficient active subjects in one or more required groups"
+        )
+      );
+    }
+
+    // Step 3: Query grading table only for active subjects
+    const gradingQuery = `SELECT * FROM ${gradingTable} WHERE id = ANY($1)`;
+    const gradingResult = await pool.query(gradingQuery, [activeSubjects]);
+
+    if (gradingResult.rows.length === 0) {
+      return next(
+        createError(404, "No grading criteria found for active subjects")
+      );
+    }
+
+    // Create a map of grading criteria for quick lookup
+    const gradingMap = {};
+    gradingResult.rows.forEach((row) => {
+      gradingMap[row.id] = {
+        E: { min: row.e0, max: row.e1 },
+        "D-": { min: row.dm0, max: row.dm1 },
+        D: { min: row.d0, max: row.d1 },
+        "D+": { min: row.dp0, max: row.dp1 },
+        "C-": { min: row.cm0, max: row.cm1 },
+        C: { min: row.c0, max: row.c1 },
+        "C+": { min: row.cp0, max: row.cp1 },
+        "B-": { min: row.bm0, max: row.bm1 },
+        B: { min: row.b0, max: row.b1 },
+        "B+": { min: row.bp0, max: row.bp1 },
+        "A-": { min: row.am0, max: row.am1 },
+        A: { min: row.a0, max: row.a1 },
       };
-  
-      // Define subject groups
-      const group_1 = [101, 102, 121, 122];
-      const group_2 = [231, 232, 233, 236, 237];
-      const group_3 = [311, 312, 313, 314, 315];
-      const group_4 = [441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451, 501, 502, 503, 504, 511];
-  
-      // Step 1: Query subjects table to get all ids and initials with status = 1
-      const subjectsQuery = `SELECT id, init FROM ${subjectTable} WHERE status = 1`;
-      const subjectsResult = await pool.query(subjectsQuery);
-      
-      if (subjectsResult.rows.length === 0) {
-        return next(createError(404, "No active subjects found"));
-      }
-  
-      const activeSubjects = subjectsResult.rows.map(row => row.id);
-      // Create a map of subject IDs to their initials
-      const subjectInitialsMap = {};
-      subjectsResult.rows.forEach(row => {
-        subjectInitialsMap[row.id] = row.init;
-      });
-      
-      // Step 2: Categorize active subjects into groups
-      const active_group_1 = group_1.filter(id => activeSubjects.includes(id));
-      const active_group_2 = group_2.filter(id => activeSubjects.includes(id));
-      const active_group_3 = group_3.filter(id => activeSubjects.includes(id));
-      const active_group_4 = group_4.filter(id => activeSubjects.includes(id));
-  
-      // Check if we have at least one active subject in each required group
-      if (active_group_1.length === 0 || active_group_2.length === 0 || 
-          active_group_3.length === 0 || active_group_4.length === 0) {
-        return next(createError(400, "Insufficient active subjects in one or more required groups"));
-      }
-  
-      // Step 3: Query grading table only for active subjects
-      const gradingQuery = `SELECT * FROM ${gradingTable} WHERE id = ANY($1)`;
-      const gradingResult = await pool.query(gradingQuery, [activeSubjects]);
-      
-      if (gradingResult.rows.length === 0) {
-        return next(createError(404, "No grading criteria found for active subjects"));
-      }
-  
-      // Create a map of grading criteria for quick lookup
-      const gradingMap = {};
-      gradingResult.rows.forEach(row => {
-        gradingMap[row.id] = {
-          'E': { min: row.e0, max: row.e1 },
-          'D-': { min: row.dm0, max: row.dm1 },
-          'D': { min: row.d0, max: row.d1 },
-          'D+': { min: row.dp0, max: row.dp1 },
-          'C-': { min: row.cm0, max: row.cm1 },
-          'C': { min: row.c0, max: row.c1 },
-          'C+': { min: row.cp0, max: row.cp1 },
-          'B-': { min: row.bm0, max: row.bm1 },
-          'B': { min: row.b0, max: row.b1 },
-          'B+': { min: row.bp0, max: row.bp1 },
-          'A-': { min: row.am0, max: row.am1 },
-          'A': { min: row.a0, max: row.a1 }
-        };
-      });
-  
-      // Step 4: Query exam table and get columns for active subjects
-      const subjectColumns = [...active_group_1, ...active_group_2, ...active_group_3, ...active_group_4]
-        .map(id => `"${id}"`).join(', ');
-      
-      const examQuery = `SELECT id, ${subjectColumns} FROM ${examTable}`;
-      const examResult = await pool.query(examQuery);
-      
-      if (examResult.rows.length === 0) {
-        return next(createError(404, "No exam records found"));
-      }
-  
-      // Step 5: Query students table for names
-      const studentsQuery = `SELECT id, CONCAT(fname, ' ', lname) AS name FROM ${studentsTable}`;
-      const studentsResult = await pool.query(studentsQuery);
-      
-      if (studentsResult.rows.length === 0) {
-        return next(createError(404, "No students found"));
-      }
-  
-      // Create a map of student names for quick lookup
-      const studentsMap = {};
-      studentsResult.rows.forEach(row => {
-        studentsMap[row.id] = row.name;
-      });
-  
-      // Helper function to determine grade and points
-      const getGradeAndPoints = (value, subjectId) => {
-        if (value === null || value === undefined) return { grade: 'N/A', points: 0 };
-        
-        const gradeRanges = gradingMap[subjectId];
-        if (!gradeRanges) return { grade: 'N/A', points: 0 };
-        
-        for (const [grade, range] of Object.entries(gradeRanges)) {
-          if (value >= range.min && value <= range.max) {
-            return {
-              grade: `${value} ${grade}`,
-              points: pointsScale[grade]
-            };
-          }
+    });
+
+    // Step 4: Query exam table and get columns for active subjects
+    const subjectColumns = [
+      ...active_group_1,
+      ...active_group_2,
+      ...active_group_3,
+      ...active_group_4,
+    ]
+      .map((id) => `"${id}"`)
+      .join(", ");
+
+    const examQuery = `SELECT id, ${subjectColumns} FROM ${examTable}`;
+    const examResult = await pool.query(examQuery);
+
+    if (examResult.rows.length === 0) {
+      return next(createError(404, "No exam records found"));
+    }
+
+    // Step 5: Query students table for names
+    // Modified: Use students table with current_form condition
+    const studentsQuery = `SELECT id, CONCAT(fname, ' ', lname) AS name FROM students WHERE current_form = $1`;
+    const studentsResult = await pool.query(studentsQuery, [sanitizedForm]);
+
+    if (studentsResult.rows.length === 0) {
+      return next(createError(404, "No students found"));
+    }
+
+    // Create a map of student names for quick lookup
+    const studentsMap = {};
+    studentsResult.rows.forEach((row) => {
+      studentsMap[row.id] = row.name;
+    });
+
+    // Helper function to determine grade and points
+    const getGradeAndPoints = (value, subjectId) => {
+      if (value === null || value === undefined)
+        return { grade: "N/A", points: 0 };
+
+      const gradeRanges = gradingMap[subjectId];
+      if (!gradeRanges) return { grade: "N/A", points: 0 };
+
+      for (const [grade, range] of Object.entries(gradeRanges)) {
+        if (value >= range.min && value <= range.max) {
+          return {
+            grade: `${value} ${grade}`,
+            points: pointsScale[grade],
+          };
         }
-        
-        return { grade: `${value} N/A`, points: 0 };
+      }
+
+      return { grade: `${value} N/A`, points: 0 };
+    };
+
+    // Process each exam record
+    let processedRecords = examResult.rows.map((record) => {
+      const totalActiveSubjects =
+        active_group_1.length +
+        active_group_2.length +
+        active_group_3.length +
+        active_group_4.length;
+      const result = {
+        id: record.id,
+        name: studentsMap[record.id] || "Unknown",
+        subjects: {},
+        marks: 0,
+        total_marks: totalActiveSubjects * 100,
+        points: 0,
+        total_points: totalActiveSubjects * 12,
       };
-  
-      // Process each exam record
-      let processedRecords = examResult.rows.map(record => {
-        const totalActiveSubjects = active_group_1.length + active_group_2.length + active_group_3.length + active_group_4.length;
-        const result = { 
-          id: record.id,
-          name: studentsMap[record.id] || 'Unknown',
-          subjects: {},
-          marks: 0,
-          total_marks: totalActiveSubjects * 100,
-          points: 0,
-          total_points: totalActiveSubjects * 12
-        };
-  
-        // Process all subjects for all forms
-        const allActiveSubjects = [...active_group_1, ...active_group_2, ...active_group_3, ...active_group_4];
-        let totalMarks = 0;
-        let totalPoints = 0;
-        
-        allActiveSubjects.forEach(subjectId => {
+
+      // Process all subjects for all forms
+      const allActiveSubjects = [
+        ...active_group_1,
+        ...active_group_2,
+        ...active_group_3,
+        ...active_group_4,
+      ];
+      let totalMarks = 0;
+      let totalPoints = 0;
+
+      allActiveSubjects.forEach((subjectId) => {
+        if (record[subjectId] !== undefined) {
+          const { grade, points } = getGradeAndPoints(
+            record[subjectId],
+            subjectId
+          );
+          // Use subject initial instead of ID
+          result.subjects[subjectInitialsMap[subjectId]] = grade;
+          totalMarks += record[subjectId] || 0;
+          totalPoints += points;
+        }
+      });
+
+      if (form == 1 || form == 2) {
+        // For forms 1 and 2, use all subjects
+        result.marks = totalMarks;
+        result.points = totalPoints;
+      } else {
+        // For forms 3 and 4, use the original logic with subject selection
+
+        // Process group 1 - add all subjects
+        let group1Marks = 0;
+        let group1Points = 0;
+        active_group_1.forEach((subjectId) => {
           if (record[subjectId] !== undefined) {
-            const { grade, points } = getGradeAndPoints(record[subjectId], subjectId);
-            // Use subject initial instead of ID
-            result.subjects[subjectInitialsMap[subjectId]] = grade;
-            totalMarks += record[subjectId] || 0;
-            totalPoints += points;
+            const { grade, points } = getGradeAndPoints(
+              record[subjectId],
+              subjectId
+            );
+            group1Marks += record[subjectId] || 0;
+            group1Points += points;
           }
         });
-  
-        if (form == 1 || form == 2) {
-          // For forms 1 and 2, use all subjects
-          result.marks = totalMarks;
-          result.points = totalPoints;
-        } else {
-          // For forms 3 and 4, use the original logic with subject selection
-          
-          // Process group 1 - add all subjects
-          let group1Marks = 0;
-          let group1Points = 0;
-          active_group_1.forEach(subjectId => {
-            if (record[subjectId] !== undefined) {
-              const { grade, points } = getGradeAndPoints(record[subjectId], subjectId);
-              group1Marks += record[subjectId] || 0;
-              group1Points += points;
-            }
-          });
-  
-          // Process group 2 - add at least two highest
-          let group2Marks = 0;
-          let group2Points = 0;
-          if (active_group_2.length > 0) {
-            const group2Values = active_group_2
-              .filter(subjectId => record[subjectId] !== undefined)
-              .map(subjectId => ({
-                subjectId,
-                value: record[subjectId],
-                ...getGradeAndPoints(record[subjectId], subjectId)
-              }))
-              .sort((a, b) => b.value - a.value);
-            
-            // Take at least two highest or all if less than two
-            const toTake = Math.min(2, group2Values.length);
-            for (let i = 0; i < toTake; i++) {
-              const item = group2Values[i];
-              group2Marks += item.value;
-              group2Points += item.points;
-            }
-          }
-  
-          // Process group 3 - add at least one highest
-          let group3Marks = 0;
-          let group3Points = 0;
-          if (active_group_3.length > 0) {
-            const group3Values = active_group_3
-              .filter(subjectId => record[subjectId] !== undefined)
-              .map(subjectId => ({
-                subjectId,
-                value: record[subjectId],
-                ...getGradeAndPoints(record[subjectId], subjectId)
-              }))
-              .sort((a, b) => b.value - a.value);
-            
-            // Take at least one highest
-            if (group3Values.length > 0) {
-              const item = group3Values[0];
-              group3Marks += item.value;
-              group3Points += item.points;
-            }
-          }
-  
-          // Process group 4 - add at least one highest
-          let group4Marks = 0;
-          let group4Points = 0;
-          if (active_group_4.length > 0) {
-            const group4Values = active_group_4
-              .filter(subjectId => record[subjectId] !== undefined)
-              .map(subjectId => ({
-                subjectId,
-                value: record[subjectId],
-                ...getGradeAndPoints(record[subjectId], subjectId)
-              }))
-              .sort((a, b) => b.value - a.value);
-            
-            // Take at least one highest
-            if (group4Values.length > 0) {
-              const item = group4Values[0];
-              group4Marks += item.value;
-              group4Points += item.points;
-            }
-          }
-  
-          // Calculate totals for forms 3 and 4
-          result.marks = group1Marks + group2Marks + group3Marks + group4Marks;
-          result.points = group1Points + group2Points + group3Points + group4Points;
-        }
-  
-        return result;
-      });
-  
-      // Sort records by points in descending order
-      processedRecords.sort((a, b) => b.points - a.points);
-  
-      // Calculate ranks with proper handling of ties
-      let currentRank = 1;
-      processedRecords.forEach((record, index) => {
-        if (index === 0) {
-          record.rank = 1;
-        } else {
-          if (record.points === processedRecords[index - 1].points) {
-            record.rank = processedRecords[index - 1].rank;
-          } else {
-            record.rank = index + 1;
+
+        // Process group 2 - add at least two highest
+        let group2Marks = 0;
+        let group2Points = 0;
+        if (active_group_2.length > 0) {
+          const group2Values = active_group_2
+            .filter((subjectId) => record[subjectId] !== undefined)
+            .map((subjectId) => ({
+              subjectId,
+              value: record[subjectId],
+              ...getGradeAndPoints(record[subjectId], subjectId),
+            }))
+            .sort((a, b) => b.value - a.value);
+
+          // Take at least two highest or all if less than two
+          const toTake = Math.min(2, group2Values.length);
+          for (let i = 0; i < toTake; i++) {
+            const item = group2Values[i];
+            group2Marks += item.value;
+            group2Points += item.points;
           }
         }
-        currentRank = record.rank;
-      });
-  
-      res.status(200).json(processedRecords);
-    } catch (err) {
-      next(createError(500, "Failed to process student marks", err));
-    }
+
+        // Process group 3 - add at least one highest
+        let group3Marks = 0;
+        let group3Points = 0;
+        if (active_group_3.length > 0) {
+          const group3Values = active_group_3
+            .filter((subjectId) => record[subjectId] !== undefined)
+            .map((subjectId) => ({
+              subjectId,
+              value: record[subjectId],
+              ...getGradeAndPoints(record[subjectId], subjectId),
+            }))
+            .sort((a, b) => b.value - a.value);
+
+          // Take at least one highest
+          if (group3Values.length > 0) {
+            const item = group3Values[0];
+            group3Marks += item.value;
+            group3Points += item.points;
+          }
+        }
+
+        // Process group 4 - add at least one highest
+        let group4Marks = 0;
+        let group4Points = 0;
+        if (active_group_4.length > 0) {
+          const group4Values = active_group_4
+            .filter((subjectId) => record[subjectId] !== undefined)
+            .map((subjectId) => ({
+              subjectId,
+              value: record[subjectId],
+              ...getGradeAndPoints(record[subjectId], subjectId),
+            }))
+            .sort((a, b) => b.value - a.value);
+
+          // Take at least one highest
+          if (group4Values.length > 0) {
+            const item = group4Values[0];
+            group4Marks += item.value;
+            group4Points += item.points;
+          }
+        }
+
+        // Calculate totals for forms 3 and 4
+        result.marks = group1Marks + group2Marks + group3Marks + group4Marks;
+        result.points =
+          group1Points + group2Points + group3Points + group4Points;
+      }
+
+      return result;
+    });
+
+    // Sort records by points in descending order
+    processedRecords.sort((a, b) => b.points - a.points);
+
+    // Calculate ranks with proper handling of ties
+    let currentRank = 1;
+    processedRecords.forEach((record, index) => {
+      if (index === 0) {
+        record.rank = 1;
+      } else {
+        if (record.points === processedRecords[index - 1].points) {
+          record.rank = processedRecords[index - 1].rank;
+        } else {
+          record.rank = index + 1;
+        }
+      }
+      currentRank = record.rank;
+    });
+
+    res.status(200).json(processedRecords);
+  } catch (err) {
+    next(createError(500, "Failed to process student marks", err));
+  }
 };
 
 // Process Marksheet
@@ -1185,7 +1292,6 @@ export const procesMarkSheet = async (req, res, next) => {
 
     const examTable = sanitizedExam;
     const subjectTable = `subjects_form_${sanitizedForm}`;
-    const studentsTable = `students_form_${sanitizedForm}`;
 
     // Step 1: Get school details including logo path
     const particularsQuery = "SELECT * FROM particulars WHERE id = 119";
@@ -1220,8 +1326,10 @@ export const procesMarkSheet = async (req, res, next) => {
     });
 
     // Step 3: Fetch students in the specified stream
-    const studentsQuery = `SELECT id, fname || ' ' || lname AS name FROM ${studentsTable} WHERE stream_id = $1::int`;
+    // Modified: Use students table with current_form and stream_id conditions
+    const studentsQuery = `SELECT id, fname || ' ' || lname AS name FROM students WHERE current_form = $1 AND stream_id = $2::int`;
     const studentsResult = await pool.query(studentsQuery, [
+      sanitizedForm,
       parseInt(sanitizedStream),
     ]);
 
@@ -1261,7 +1369,6 @@ export const procesMarkSheet = async (req, res, next) => {
     };
 
     return response;
-    // res.status(200).json(response);
   } catch (error) {
     next(error);
   }
@@ -1270,7 +1377,7 @@ export const procesMarkSheet = async (req, res, next) => {
 // Process Mark for ALL FORM AND STREAM // THIS IS RETURNING DATA
 export const StudentMarkList = async (req, res, next) => {
   try {
-    const studentMarkResult = await studentReportMarks(req);
+    const studentMarkResult = await studentReportMarks(req)
     const dataToFormat = studentMarkResult.studentResults;
 
     if (!dataToFormat || !Array.isArray(dataToFormat)) {
@@ -1295,8 +1402,6 @@ export const StudentMarkList = async (req, res, next) => {
       motto: particularsResult.rows[0]?.motto || "",
       address: particularsResult.rows[0]?.address || "",
       phone: particularsResult.rows[0]?.phone || "",
-      // exam: yearValue,
-      // exams?.exam_1.name.replace(/_/g, " ").toUpperCase(),
       logoPath: logoPath,
     };
 
@@ -1341,6 +1446,7 @@ export const StudentMarkList = async (req, res, next) => {
     });
 
     const response = {
+      examDetails : studentMarkResult.examDetails,
       schoolDetails,
       formattedStudents,
       subjectHeaders: [
@@ -1353,7 +1459,154 @@ export const StudentMarkList = async (req, res, next) => {
       ],
     };
     return response;
-    // return res.status(200).json(formattedStudents);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Send to front end processed DATA above // USE THIS FOR FRONTEND
+export const StudentMarkAnalysis = async (req, res, next) => {
+  try {
+    // Get the raw mark list data
+    const markList = await StudentMarkList(req);
+
+    // Get active subjects from database
+    const activeSubjects = await pool.query(
+      `SELECT id, name, init FROM subjects_form_1 WHERE status = 1`
+    );
+
+    // console.log(activeSubjects)
+    // Create a map of subject initials to full names
+    const subjectMap = {};
+    activeSubjects.rows.forEach((subject) => {
+      subjectMap[subject.init] = {
+        name: subject.name,
+        id: subject.id,
+      };
+    });
+
+    // Grade to points mapping
+    const gradePoints = {
+      A: 12,
+      "A-": 11,
+      "B+": 10,
+      B: 9,
+      "B-": 8,
+      "C+": 7,
+      C: 6,
+      "C-": 5,
+      "D+": 4,
+      D: 3,
+      "D-": 2,
+      E: 1,
+    };
+
+    // Group students by stream
+    const streams = {};
+    markList.formattedStudents.forEach((student) => {
+      if (!streams[student.stream]) {
+        streams[student.stream] = [];
+      }
+      streams[student.stream].push(student);
+    });
+
+    // Initialize performance data structure
+    const performanceData = [];
+
+    // Process each active subject
+    activeSubjects.rows.forEach((subject) => {
+      const subjectCode = subject.init;
+      const subjectName = subject.name;
+
+      const subjectData = {
+        code: subject.id.toString(),
+        name: subjectName,
+        optional: false, // You may need to adjust this based on your data
+        instructor: "To be assigned", // You can modify this as needed
+        streams: [],
+        overallAvg: 0,
+        rank: 0,
+      };
+
+      // Process each stream for this subject
+      Object.keys(streams).forEach((streamName) => {
+        const streamStudents = streams[streamName];
+        const enrolment = streamStudents.length;
+
+        const streamData = {
+          name: streamName,
+          enrolment: enrolment,
+          grades: {
+            A: 0,
+            "A-": 0,
+            "B+": 0,
+            B: 0,
+            "B-": 0,
+            "C+": 0,
+            C: 0,
+            "C-": 0,
+            "D+": 0,
+            D: 0,
+            "D-": 0,
+            E: 0,
+          },
+          avgPoints: 0,
+        };
+
+        // Count grades for this subject in this stream
+        let totalPoints = 0;
+        streamStudents.forEach((student) => {
+          if (student.subjects[subjectCode]) {
+            const grade = student.subjects[subjectCode].split(" ")[1];
+            streamData.grades[grade]++;
+            totalPoints += gradePoints[grade];
+          }
+        });
+
+        // Calculate average points for this stream
+        if (enrolment > 0) {
+          streamData.avgPoints = parseFloat(
+            (totalPoints / enrolment).toFixed(2)
+          );
+        }
+
+        subjectData.streams.push(streamData);
+      });
+
+      // Calculate overall average for this subject
+      const totalPoints = subjectData.streams.reduce(
+        (sum, stream) => sum + stream.avgPoints * stream.enrolment,
+        0
+      );
+      const totalStudents = subjectData.streams.reduce(
+        (sum, stream) => sum + stream.enrolment,
+        0
+      );
+
+      if (totalStudents > 0) {
+        subjectData.overallAvg = parseFloat(
+          (totalPoints / totalStudents).toFixed(2)
+        );
+      }
+
+      performanceData.push(subjectData);
+    });
+
+    // Calculate ranks based on overall averages
+    performanceData.sort((a, b) => b.overallAvg - a.overallAvg);
+    performanceData.forEach((subject, index) => {
+      subject.rank = index + 1;
+    });
+
+    // Prepare the final response
+    const response = {
+      examDetails : markList.examDetails,
+      schoolDetails: markList.schoolDetails,
+      performanceData: performanceData,
+    };
+
+    // res.status(200).json(response);
+    return response
   } catch (err) {
     next(err);
   }
@@ -1362,9 +1615,81 @@ export const StudentMarkList = async (req, res, next) => {
 // Send to front end processed DATA above // USE THIS FOR FRONTEND
 export const StudentMarkListReady = async (req, res, next) => {
   try {
-    const markList = await StudentMarkList(req)
+    const markList = await StudentMarkList(req);
     res.status(200).json(markList.formattedStudents);
   } catch (err) {
-    next(err)
+    next(err);
   }
-}
+};
+
+
+// GET EXAMS ATTEMPTED BY STUDENT
+export const StudentAttemptedExams = async (req, res, next) => {
+  const { id } = req.body;
+
+  // Validate input (security best practice)
+  if (!id) {
+    return next(createError(400, "Student ID not provided"));
+  }
+
+  try {
+    // Use parameterized query to prevent SQL injection
+    const query = `
+      WITH student_info AS (
+        SELECT id, year_of_enrolment, current_form
+        FROM students 
+        WHERE id = $1  -- Parameterized query for security
+      )
+      
+      -- exam1 is always included
+      SELECT exam_name, year, 'exam1' AS source_table
+      FROM form_1_exams
+      WHERE year BETWEEN
+        (SELECT year_of_enrolment FROM student_info)
+        AND EXTRACT(YEAR FROM CURRENT_DATE)
+
+      UNION ALL
+
+      -- include exam2 if form ≥ 2
+      SELECT exam_name, year, 'exam2' AS source_table
+      FROM form_2_exams
+      WHERE (SELECT current_form FROM student_info) >= 2
+        AND year BETWEEN
+          (SELECT year_of_enrolment FROM student_info)
+          AND EXTRACT(YEAR FROM CURRENT_DATE)
+
+      UNION ALL
+
+      -- include exam3 if form ≥ 3
+      SELECT exam_name, year, 'exam3' AS source_table
+      FROM form_3_exams
+      WHERE (SELECT current_form FROM student_info) >= 3
+        AND year BETWEEN
+          (SELECT year_of_enrolment FROM student_info)
+          AND EXTRACT(YEAR FROM CURRENT_DATE)
+
+      UNION ALL
+
+      -- include exam4 if form = 4
+      SELECT exam_name, year, 'exam4' AS source_table
+      FROM form_4_exams
+      WHERE (SELECT current_form FROM student_info) = 4
+        AND year BETWEEN
+          (SELECT year_of_enrolment FROM student_info)
+          AND EXTRACT(YEAR FROM CURRENT_DATE)
+    `;
+
+    // Execute query with parameter (using a DB client like pg, mysql2, etc.)
+    const result = await pool.query(query, [id]); // Assuming 'pool' is your database connection
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "No exam records found for this student" });
+    }
+
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    next(err); // Pass error to Express error handler
+  }
+};

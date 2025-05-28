@@ -8,10 +8,10 @@ import loginLimiter from '../../utils/rateLimiter.js'
 
 // Register User Controller
 export const registerUser = async (req, res, next) => {
-  const { username, password } = req.body;
+  const { user_id, username, password, role } = req.body;
 
   // Input validation
-  if (!username || !password) {
+  if (!user_id || !username || !password ||!role) {
     return next(createError(400, "Username and password are required"));
   }
 
@@ -40,8 +40,8 @@ export const registerUser = async (req, res, next) => {
       await client.query("BEGIN");
 
       const result = await client.query(
-        "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username",
-        [username, hash]
+        "INSERT INTO users (username, password, user_id, role) VALUES ($1, $2, $3, $4) RETURNING id, username",
+        [username, hash, user_id, role]
       );
 
       await client.query("COMMIT");
@@ -82,7 +82,7 @@ export const userLogin = async (req, res, next) => {
       `UPDATE users
        SET token_version = $1
        WHERE username = $2
-       RETURNING id, username, password, role, is_active, token_version`,
+       RETURNING id, user_id, username, password, role, is_active, token_version`,
       [newTokenVersion, username]
     );
 
@@ -109,6 +109,7 @@ export const userLogin = async (req, res, next) => {
       {
         user: {
           id: user.id,
+          user_id: user.user_id,
           username: user.username,
           role: user.role,
         },
@@ -126,6 +127,7 @@ export const userLogin = async (req, res, next) => {
       {
         user: {
           id: user.id,
+          user_id: user.user_id,
         },
         tokenVersion: newTokenVersion,
         jti: uuidv4(),
@@ -174,6 +176,7 @@ export const userLogin = async (req, res, next) => {
     res.status(200).json({
       user: {
         id: user.id,
+        user_id: user.user_id,
         username: user.username,
         role: user.role,
       },
@@ -204,7 +207,7 @@ export const refreshAccessToken = async (req, res, next) => {
 
     // Get user data including token_version
     const userQuery = await pool.query(
-      `SELECT id, username, role, token_version FROM users WHERE id = $1`,
+      `SELECT id, user_id, username, role, token_version FROM users WHERE id = $1`,
       [decoded.user.id]
     );
 
@@ -240,6 +243,7 @@ export const refreshAccessToken = async (req, res, next) => {
       {
         user: {
           id: user.id,
+          user_id : user.user_id,
           username: user.username,
           role: user.role,
         },
@@ -264,6 +268,7 @@ export const refreshAccessToken = async (req, res, next) => {
     res.status(200).json({
       user: {
         id: user.id,
+        user_id: user.user_id,
         username: user.username,
         role: user.role,
       },
@@ -294,7 +299,7 @@ export const getLoggedInUser = async (req, res, next) => {
     }
 
     const { rows } = await pool.query(
-      `SELECT id, username, role, is_active, created_at 
+      `SELECT id, user_id, username, role, is_active, created_at 
        FROM users 
        WHERE id = $1`,
       [userId]
@@ -312,6 +317,7 @@ export const getLoggedInUser = async (req, res, next) => {
 
     res.status(200).json({
       id: user.id,
+      user_id: user.user_id,
       username: user.username,
       role: user.role,
       is_active: user.is_active,

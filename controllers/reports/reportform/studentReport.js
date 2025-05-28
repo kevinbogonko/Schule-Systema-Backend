@@ -1,156 +1,6 @@
-import pool from "../../../config/db_connection.js"
+import pool from "../../../config/db_connection.js";
 import { createError } from "../../../utils/ErrorHandler.js";
 import { sanitizeStringVariables } from "../../../utils/sanitizeString.js";
-
-// export const studentReportMarks = async (req, res, next) => {
-//   const { form, exams, formula } = req.body;
-
-//   try {
-//     if (!form || !exams || !formula) {
-//       return next(createError(400, 'Required fields are missing!'));
-//     }
-
-//     const sanitizedForm = sanitizeStringVariables(form);
-//     if (typeof exams !== 'object' || exams === null) {
-//       return next(createError(400, 'Exams must be an object'));
-//     }
-
-//     const validPattern = /^[a-z0-9_]+$/i;
-//     const sqlInjectionPattern = /(\bUNION\b|\bSELECT\b|\bINSERT\b|\bDELETE\b|\bUPDATE\b|\bDROP\b|\bALTER\b|\bCREATE\b|\bEXEC\b|\b--\b)/i;
-
-//     // Fetch active subjects
-//     const subjectTable = `subjects_form_${sanitizedForm}`;
-//     const subjectsRes = await pool.query(`SELECT id, name FROM ${subjectTable} WHERE status = 1`);
-//     const subjects = subjectsRes.rows;
-//     const subjectMap = new Map(subjects.map(sub => [sub.id, sub]));
-
-//     const examKeys = Object.keys(exams);
-//     const examTables = {};
-//     const examOutofs = {};
-//     const examAliases = {};
-
-//     // Validate and prepare exams
-//     for (let key of examKeys) {
-//       const { name, alias, outof } = exams[key];
-
-//     //   if(!name)  return next(createError(400, "Invalid name inputs!"))
-//     //   if(!alias)  return next(createError(400, "Invalid alias inputs!"))
-//     //   if(!outof)  return next(createError(400, "Invalid outof inputs!"))
-
-//     //   if(!validPattern.test(name))  return next(createError(400, "Invalid name v inputs!"))
-//     //   if(!validPattern.test(alias))  return next(createError(400, "Invalid alias v inputs!"))
-
-//       if (!name || !alias || !outof || !validPattern.test(name)) {
-//         return next(createError(400, "Invalid exam inputs!"));
-//       }
-//       if (sqlInjectionPattern.test(name)) {
-//         return next(createError(400, "Possible SQL injection in exam name!"));
-//       }
-
-//       // Check if table exists
-//       const examTableRes = await pool.query(`
-//         SELECT to_regclass($1) as exists
-//       `, [name]);
-
-//       if (!examTableRes.rows[0].exists) {
-//         return next(createError(400, `Exam table ${name} does not exist!`));
-//       }
-
-//       examTables[key] = name;
-//       examOutofs[key] = parseFloat(outof);
-//       examAliases[key] = alias;
-//     }
-
-//     // Collect active marks from all exam tables
-//     const studentsTable = `students_form_${sanitizedForm}`
-//     const studentMap = new Map();
-//     for (const [key, tableName] of Object.entries(examTables)) {
-//       const examRes = await pool.query(`
-//         SELECT s.id, s.fname || ' ' || s.lname AS name, e.*
-//         FROM ${tableName} e
-//         JOIN ${studentsTable} s ON s.id = e.id
-//       `);
-
-//       for (let row of examRes.rows) {
-//         if (!studentMap.has(row.id)) {
-//           studentMap.set(row.id, {
-//             id: row.id,
-//             name: row.name,
-//             results: []
-//           });
-//         }
-
-//         const student = studentMap.get(row.id);
-
-//         subjects.forEach(subject => {
-//           const code = subject.id.toString();
-//           const value = parseFloat(row[code]) || 0;
-
-//           let subjectEntry = student.results.find(r => r.code === code);
-//           if (!subjectEntry) {
-//             subjectEntry = {
-//               code: code,
-//               subject: subject.name,
-//               marks: {}
-//             };
-//             student.results.push(subjectEntry);
-//           }
-
-//           subjectEntry.marks[examAliases[key]] = value;
-//         });
-//       }
-//     }
-
-//     // Calculate final marks
-//     const totalExams = examKeys.length;
-//     const computeMark = (m1, m2 = 0, m3 = 0, o1 = 0, o2 = 0, o3 = 0) => {
-//       if (totalExams === 1) return m1;
-//       if (totalExams === 2) {
-//         if (formula === 'average') return (m1 + m2) / 2;
-//         if (formula === 'twoAdd') {
-//           const total = o1 + o2;
-//           if (total !== 100) return 0.5 * m1 + 0.5 * m2;
-//           return (m1 * (o1 / 100)) + (m2 * (o2 / 100));
-//         }
-//       }
-//       if (totalExams === 3) {
-//         if (formula === 'average') return (m1 + m2 + m3) / 3;
-//         if (formula === 'threeAdd') {
-//           const total = o1 + o2 + o3;
-//           if (total !== 100) return 0.25 * m1 + 0.25 * m2 + 0.5 * m3;
-//           return (m1 * (o1 / 100)) + (m2 * (o2 / 100)) + (m3 * (o3 / 100));
-//         }
-//         if (formula === 'threeWeighted') {
-//           return 0.15 * m1 + 0.15 * m2 + 0.7 * m3;
-//         }
-//       }
-//       return 0;
-//     };
-
-//     studentMap.forEach(student => {
-//       student.results.forEach(subject => {
-//         const m1 = subject.marks[examAliases['exam_1']] || 0;
-//         const m2 = subject.marks[examAliases['exam_2']] || 0;
-//         const m3 = subject.marks[examAliases['exam_3']] || 0;
-//         const o1 = examOutofs['exam_1'] || 0;
-//         const o2 = examOutofs['exam_2'] || 0;
-//         const o3 = examOutofs['exam_3'] || 0;
-
-//         subject.marks.mark = computeMark(m1, m2, m3, o1, o2, o3);
-//       });
-//     });
-
-//     const result = Array.from(studentMap.values());
-//     res.status(200).json(result);
-
-//   } catch (err) {
-//     next(err);
-//   }
-// };
-
-// Debug the code below. 
-// The code has an iteration where subject.instructor is not returned
-// Give me full final updated code
 
 export const studentReportMarks = async (req, res, next) => {
   const { form, exams, formula, yearValue } = req.body;
@@ -161,6 +11,7 @@ export const studentReportMarks = async (req, res, next) => {
     }
 
     const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(yearValue);
     if (typeof exams !== "object" || exams === null) {
       return next(createError(400, "Exams must be an object"));
     }
@@ -391,14 +242,17 @@ export const studentReportMarks = async (req, res, next) => {
     };
 
     // Collect active marks from all exam tables
-    const studentsTable = `students_form_${sanitizedForm}`;
     const studentMap = new Map();
 
-    // First get all students with their KCPE marks and stream
-    const studentsRes = await pool.query(`
+    // Modified: Get all students with current_form and current_year conditions
+    const studentsRes = await pool.query(
+      `
       SELECT id, fname || ' ' || lname AS name, kcpe_marks, stream_id, phone
-      FROM ${studentsTable}
-    `);
+      FROM students 
+      WHERE current_form = $1 AND current_year = $2
+    `,
+      [sanitizedForm, sanitizedYear]
+    );
 
     studentsRes.rows.forEach((student) => {
       studentMap.set(student.id, {
@@ -407,7 +261,7 @@ export const studentReportMarks = async (req, res, next) => {
         kcpe_marks: student.kcpe_marks,
         kcpe_grade: getKcpeGrade(student.kcpe_marks),
         stream_id: student.stream_id,
-        phone : student.phone,
+        phone: student.phone,
         results: [],
         totalMarks: 0,
         totalPoints: 0,
@@ -430,10 +284,14 @@ export const studentReportMarks = async (req, res, next) => {
 
     // Process each exam table
     for (const [key, tableName] of Object.entries(examTables)) {
-      const examRes = await pool.query(`
+      const examRes = await pool.query(
+        `
         SELECT e.* FROM ${tableName} e
-        JOIN ${studentsTable} s ON s.id = e.id
-      `);
+        JOIN students s ON s.id = e.id
+        WHERE s.current_form = $1 AND s.current_year = $2
+      `,
+        [sanitizedForm, sanitizedYear]
+      );
 
       for (let row of examRes.rows) {
         if (!studentMap.has(row.id)) continue;
@@ -625,9 +483,13 @@ export const studentReportMarks = async (req, res, next) => {
       streamGroups[student.stream_id].push(student);
     });
 
-    const streamTable = `form_${form}_streams`;
+    // Modified: Use streams table with INNER JOIN to stream_names
     const streamsRes = await pool.query(
-      `SELECT id, stream_name FROM ${streamTable}`
+      `SELECT s.id, sn.stream_name 
+       FROM streams s
+       INNER JOIN stream_names sn ON s.stream_id = sn.id
+       WHERE s.form = $1`,
+      [form]
     );
     const streamNameMap = new Map(
       streamsRes.rows.map((row) => [row.id, row.stream_name])
@@ -948,10 +810,13 @@ export const studentReportMarks = async (req, res, next) => {
 
         // Get class teacher name
         let classTeacherName = "N/A";
+        // Modified: Use streams table with INNER JOIN to get teacher_id
         const streamTeacherRes = await pool.query(
           `
-      SELECT teacher_id FROM form_${form}_streams WHERE id = $1
-      `,
+          SELECT s.teacher_id 
+          FROM streams s
+          WHERE s.id = $1
+          `,
           [student.stream_id]
         );
 
@@ -1023,7 +888,7 @@ export const studentReportMarks = async (req, res, next) => {
           }`,
           overal_position: `${student.overallRank}/${allStudents.length}`,
           form: form,
-          stream_id : student.stream_id,
+          stream_id: student.stream_id,
           stream: streamName,
           comments: [
             {
@@ -1064,7 +929,7 @@ export const studentReportMarks = async (req, res, next) => {
       studentResults: studentResults,
     };
 
-    // return res.status(200).json(response);
+    // res.status(200).json(response);
     return response
   } catch (err) {
     next(err);

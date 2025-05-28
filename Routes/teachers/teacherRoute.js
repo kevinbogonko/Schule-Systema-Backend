@@ -6,6 +6,7 @@ import {
   getSubjectTeacher,
   updateSubjectTeacher,
   getSubjectTeachersWithoutConstraints,
+  SubjectTeacherPerStream,
 } from "../../controllers/teachers/subjectTeacherController.js";
 import { getAllClassTeachers, getClassTeacher, updateClassTeacher } from '../../controllers/teachers/classTeacherController.js'
 import {getStaffPhoto} from "../../controllers/teachers/teacherPhotosController.js"
@@ -41,6 +42,9 @@ router.post("/addsubjectteacher", addSubjectTeacher)
 
 // Get one Subject Teacher
 router.post("/getsubjectteacher", getSubjectTeacher)
+
+// Get Subjects set to Teacher
+router.post("/getteachersubjects", SubjectTeacherPerStream);
 
 // Update Subject Teacher
 router.put("/updatesubjectteacher/:id", updateSubjectTeacher)

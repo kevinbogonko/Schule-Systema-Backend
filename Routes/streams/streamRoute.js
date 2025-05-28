@@ -1,5 +1,16 @@
 import express from 'express'
-import { getStream, getAllStreams, addStream, updateStream, deleteStream } from '../../controllers/streams/crudStreamController.js'
+import {
+  getStream,
+  getAllStreams,
+  addStream,
+  updateStream,
+  deleteStream,
+  getAllStreamNames,
+  getStreamName,
+  addGlobalStream,
+  updateGlobalStream,
+  deleteGlobalStream,
+} from "../../controllers/streams/crudStreamController.js";
 
 const router = express.Router()
 
@@ -18,6 +29,23 @@ router.put("/updatestream/:id", updateStream)
 // Endpoint to delete Stream
 router.post("/deletestream/:id", deleteStream)
 
+
+
+
+// Higher GET ALL Streams
+router.get("/getstreamnames", getAllStreamNames);
+
+// Higher GET ONE Stream
+router.post("/getstreamname", getStreamName);
+
+// Higher add Stream
+router.post("/addstreamname", addGlobalStream);
+
+// Higher update Stream
+router.put("/updatestreamname/:id", updateGlobalStream);
+
+// Higher delete Stream
+router.post("/deletestreamname/:id", deleteGlobalStream);
 
 
 export default router

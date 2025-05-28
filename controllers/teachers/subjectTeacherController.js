@@ -422,3 +422,104 @@ export const updateSubjectTeacher = async (req, res, next) => {
     next(createError(500, 'Failed to update Subject Teacher record due to server error'));
   }
 };
+
+export const SubjectTeacherPerStream = async (req, res, next) => {
+  if (!req.is("application/json")) {
+    return next(createError(415, "Expected application/json"));
+  }
+
+  const { form, teacher_id, stream_id, year } = req.body;
+
+  try {
+    // 1. Validate required fields
+    const requiredFields = { form, teacher_id, stream_id, year };
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return next(createError(400, `Missing: ${missingFields.join(", ")}`));
+    }
+
+    // 2. Sanitize inputs
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
+
+    // const subjectsTable = `subjects_form_${sanitizedForm}`;
+    const subjectTeachersTable = `subjectteachers_form_${sanitizedForm}`;
+
+    // 3. Fetch subjects with status = 1
+    // const subjectResult = await pool.query(
+    //   `SELECT id, name, init FROM ${subjectsTable} WHERE status = 1`
+    // );
+    // subjectResult.rows.map((row) => console.log(row));
+    // const activeSubjects = subjectResult.rows.map((s) => ({
+    //   id: parseInt(s.id),
+    //   name: s.name,
+    //   init: s.init,
+    // }));
+    // const activeSubjectIds = activeSubjects.map((s) => s.id);
+
+    // // 4. Fetch assigned subjects for stream + year
+    // const teacherResult = await pool.query(
+    //   `SELECT id, stream_id, teacher_id, subject_id, year, unival 
+    //    FROM ${subjectTeachersTable} 
+    //    WHERE year = $1`,
+    //   [sanitizedYear]
+    // );
+    // const teacherRows = teacherResult.rows;
+
+    // const assignedSubjectIdsRaw = teacherRows.map((r) =>
+    //   parseInt(r.subject_id)
+    // );
+    // const assignedSubjectIds = assignedSubjectIdsRaw.filter((id) =>
+    //   activeSubjectIds.includes(id)
+    // );
+
+    // // 5. Identify unassigned subject ids
+    // const unassignedSubjectIds = activeSubjectIds.filter(
+    //   (id) => !assignedSubjectIds.includes(id)
+    // );
+
+    // 6. Build assignedSubjects with instructor info
+    // let assignedSubjects = [];
+
+    // if (assignedSubjectIds.length > 0) {
+    //   const placeholders = assignedSubjectIds
+    //     .map((_, i) => `$${i + 2}`)
+    //     .join(","); // $2, $3, $4, $5...
+    //   const detailedAssigned = await pool.query(
+    //     `SELECT st.id, st.stream_id, st.subject_id, st.teacher_id, s.name AS subject_name, sf.title, sf.fname, sf.lname
+    //      FROM ${subjectTeachersTable} st
+    //      JOIN ${subjectsTable} s ON st.subject_id = s.id
+    //      JOIN staff sf ON st.teacher_id = sf.id
+    //      WHERE st.year = $1 AND st.subject_id IN (${placeholders})`,
+    //     [sanitizedYear, ...assignedSubjectIds]
+    //   );
+
+      // detailedAssigned.rows.map((row) => console.log(row))
+
+    //   assignedSubjects = detailedAssigned.rows.map((row) => ({
+    //     id: row.id,
+    //     teacher_id: row.teacher_id,
+    //     stream_id: row.stream_id,
+    //     code: parseInt(row.subject_id),
+    //     init: activeSubjects.find((s) => s.name === row.subject_name).init,
+    //     name: row.subject_name,
+    //     instructor: `${row.title} ${row.lname}`,
+    //   }));
+    // }
+    const response = await pool.query(
+      `SELECT subject_id FROM ${subjectTeachersTable} WHERE teacher_id = $1 AND stream_id = $2 AND year = $3`,
+      [teacher_id, stream_id, year]
+    );
+
+    // 7. Return final response
+    res.status(200).json(response.rows);
+  } catch (err) {
+    console.log(err);
+    return next(
+      createError(500, "An error occurred while processing your request.")
+    );
+  }
+}

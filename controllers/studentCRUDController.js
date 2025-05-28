@@ -1,195 +1,242 @@
-import pool from "../config/db_connection.js"
-import { createError } from "../utils/ErrorHandler.js"
-import { sanitizeStringVariables } from "../utils/sanitizeString.js"
+import pool from "../config/db_connection.js";
+import { createError } from "../utils/ErrorHandler.js";
+import { sanitizeStringVariables } from "../utils/sanitizeString.js";
 
 // Add Student Controller
-export const addStudent = async (req, res, next) =>{
+export const addStudent = async (req, res, next) => {
+  const {
+    id,
+    fname,
+    mname,
+    lname,
+    sex,
+    dob,
+    stream_id,
+    kcpe_marks,
+    form,
+    year,
+    phone,
+    address,
+  } = req.body;
 
-    const { id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, form, year, phone, address } = req.body
+  try {
+    // Validate input more thoroughly
+    if (
+      !id ||
+      !fname ||
+      !mname ||
+      !lname ||
+      !sex ||
+      !dob ||
+      !stream_id ||
+      !kcpe_marks ||
+      !year ||
+      !phone
+    )
+      return next(createError(400, "Missing required parameters!"));
 
-    try {
-        // Validate input more thoroughly
-        if (!id || !fname || !mname|| !lname || !sex || !dob || !stream_id|| !kcpe_marks || !year || !phone) return next(createError(400, 'Missing required parameters!'))
-        
-        // More strict sanitization
-        const sanitizedFName = sanitizeStringVariables(fname)
-        const sanitizedMName = sanitizeStringVariables(mname)
-        const sanitizedLName = sanitizeStringVariables(lname)
-        const sanitizedSex = sanitizeStringVariables(sex)
-        const sanitizedDOB = sanitizeStringVariables(dob)
-        const sanitizedForm = sanitizeStringVariables(form)
-        const sanitizedYear = sanitizeStringVariables(year)
+    // More strict sanitization
+    const sanitizedFName = sanitizeStringVariables(fname);
+    const sanitizedMName = sanitizeStringVariables(mname);
+    const sanitizedLName = sanitizeStringVariables(lname);
+    const sanitizedSex = sanitizeStringVariables(sex);
+    const sanitizedDOB = sanitizeStringVariables(dob);
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-        // Validate inputs against stricter regex pattern
-        const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validPattern.test(sanitizedFName) || 
-            !validPattern.test(sanitizedMName) || 
-            !validPattern.test(sanitizedLName) || 
-            !validPattern.test(sanitizedSex) || 
-            !validPattern.test(sanitizedDOB) || 
-            !validPattern.test(stream_id) || 
-            !validPattern.test(kcpe_marks) || 
-            !validPattern.test(sanitizedForm) || 
-            !validPattern.test(sanitizedYear) || 
-            !validPattern.test(phone) || 
-            !validPattern.test(address))
-        return next(createError(400, "Invalid inputs!"))
+    // Validate inputs against stricter regex pattern
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (
+      !validPattern.test(sanitizedFName) ||
+      !validPattern.test(sanitizedMName) ||
+      !validPattern.test(sanitizedLName) ||
+      !validPattern.test(sanitizedSex) ||
+      !validPattern.test(sanitizedDOB) ||
+      !validPattern.test(stream_id) ||
+      !validPattern.test(kcpe_marks) ||
+      !validPattern.test(sanitizedForm) ||
+      !validPattern.test(sanitizedYear) ||
+      !validPattern.test(phone) ||
+      !validPattern.test(address)
+    )
+      return next(createError(400, "Invalid inputs!"));
 
-        const validIdPattern = /^[0-9_]+$/ // Case insensitive, only alphanumeric + underscore
-        if (!validIdPattern.test(id)) return next(createError(400, "Invalid Student Reg No!"))
-        
-        // Restrict table names to a predefined list
-        const allowedTables = ['students_form_1', 'students_form_2', 'students_form_3', 'students_form_4']
+    const validIdPattern = /^[0-9_]+$/;
+    if (!validIdPattern.test(id))
+      return next(createError(400, "Invalid Student Reg No!"));
 
-        // Students Table
-        const studentsTable = `students_form_${sanitizedForm}`
-   
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(studentsTable)) return next(createError(400, 'Invalid form!'))
+    // Validate form is between 1-4
+    if (!["1", "2", "3", "4"].includes(sanitizedForm))
+      return next(createError(400, "Invalid form! Must be 1-4"));
 
-        const result = await pool.query(
-            `INSERT INTO ${studentsTable} (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, year, phone, address)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-            [id, sanitizedFName, sanitizedMName, sanitizedLName, sanitizedSex, sanitizedDOB, stream_id, kcpe_marks, sanitizedYear, phone, address]
-        )
-        res.status(201).json(result.rows[0])
-    } catch (err) {
-        next(err)
-    }
-}
+    const result = await pool.query(
+      `INSERT INTO students 
+             (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, current_form, current_year, phone, address)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+             RETURNING *`,
+      [
+        id,
+        sanitizedFName,
+        sanitizedMName,
+        sanitizedLName,
+        sanitizedSex,
+        sanitizedDOB,
+        stream_id,
+        kcpe_marks,
+        sanitizedForm,
+        sanitizedYear,
+        phone,
+        address,
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
 
 // Fetch a Single Student Controller
 export const getStudent = async (req, res, next) => {
+  const { year, form, student_id } = req.body;
 
-    const { form, student_id } = req.body
-    // const { student_id } = req.params
+  try {
+    if (!year || !form || !student_id)
+      return next(createError(400, "Missing required parameters!"));
 
-    try {
-        // Validate input more thoroughly
-        if (!form || !student_id ) return next(createError(400, 'Missing required parameters!'))
-        // More strict sanitization
-        const sanitizedForm = sanitizeStringVariables(form)
-    
-        // Validate inputs against stricter regex pattern
-        const validFormPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validFormPattern.test(sanitizedForm)) return next(createError(400, "Invalid Form input!"))
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
+    const validFormPattern = /^[a-z0-9_]+$/i;
+    if (!validFormPattern.test(sanitizedForm))
+      return next(createError(400, "Invalid Form input!"));
 
-        const validIdPattern = /^[0-9_]+$/ // Case insensitive, only alphanumeric + underscore
-        if (!validIdPattern.test(student_id)) return next(createError(400, "Invalid Student Reg No!"))
-    
-        // Restrict table names to a predefined list
-        const allowedTables = ['students_form_1', 'students_form_2', 'students_form_3', 'students_form_4']
+    const validIdPattern = /^[0-9_]+$/;
+    if (!validIdPattern.test(student_id))
+      return next(createError(400, "Invalid Student Reg No!"));
 
-        // Students Table
-        const studentsTable = `students_form_${sanitizedForm}`
+    // Validate form is between 1-4
+    if (!["1", "2", "3", "4"].includes(sanitizedForm))
+      return next(createError(400, "Invalid form! Must be 1-4"));
 
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(studentsTable)) return next(createError(400, 'Invalid form!'))
+    const result = await pool.query(
+      `SELECT * FROM students 
+             WHERE id = $1 AND current_form = $2 AND current_year = $3`,
+      [student_id, sanitizedForm, sanitizedYear]
+    );
 
-        const result = await pool.query(`SELECT * FROM ${studentsTable} WHERE id = $1`, [student_id])
-
-        if(result.rows.length > 0){
-            res.status(200).json(result.rows[0])
-        }else{
-            next(createError(404, 'Student not Found'))
-        }
-        
-    } catch (err) {
-        next(err)
+    if (result.rows.length > 0) {
+      res.status(200).json(result.rows[0]);
+    } else {
+      next(createError(404, "Student not Found"));
     }
-}
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Fetch a Single Student Controller
+export const getStudentInfo = async (req, res, next) => {
+  const { student_id } = req.body;
+
+  try {
+    if (!student_id)
+      return next(createError(400, "Missing required parameters!"));
+
+    const validIdPattern = /^[0-9_]+$/;
+    if (!validIdPattern.test(student_id))
+      return next(createError(400, "Invalid Student Reg No!"));
+
+    const result = await pool.query(
+      `SELECT * FROM students 
+             WHERE id = $1`,
+      [student_id]
+    );
+
+    if (result.rows.length > 0) {
+      res.status(200).json(result.rows[0]);
+    } else {
+      next(createError(404, "Student not Found"));
+    }
+  } catch (err) {
+    next(err);
+  }
+};
 
 // Fetch all Students Controller
 export const getAllStudents = async (req, res, next) => {
+  const { form, year } = req.body;
 
-    const { form } = req.body
+  try {
+    if (!form || !year)
+      return next(createError(400, "Missing required parameters!"));
 
-    try {
-        // Validate input more thoroughly
-        if (!form) return next(createError(400, 'Missing required parameters!'))
-        // More strict sanitization
-        const sanitizedForm = sanitizeStringVariables(form)
-    
-        // Validate inputs against stricter regex pattern
-        const validFormPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validFormPattern.test(sanitizedForm)) return next(createError(400, "Invalid Form input!"))
-    
-        // Restrict table names to a predefined list
-        const allowedTables = ['students_form_1', 'students_form_2', 'students_form_3', 'students_form_4']
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-        // Students Table
-        const studentsTable = `students_form_${sanitizedForm}`
+    const validFormPattern = /^[a-z0-9_]+$/i;
+    if (!validFormPattern.test(sanitizedForm))
+      return next(createError(400, "Invalid Form input!"));
 
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(studentsTable)) return next(createError(400, 'Invalid form!'))
+    // Validate form is between 1-4
+    if (!["1", "2", "3", "4"].includes(sanitizedForm))
+      return next(createError(400, "Invalid form! Must be 1-4"));
 
-        const result = await pool.query(`SELECT * FROM ${studentsTable}`)
+    const result = await pool.query(
+      `SELECT * FROM students 
+             WHERE current_form = $1 AND current_year = $2`,
+      [sanitizedForm, sanitizedYear]
+    );
 
-        if(result.rows.length > 0){
-            res.status(200).json(result.rows)
-        }else{
-            next(createError(404, 'Student not Found'))
-        }
-        
-    } catch (err) {
-        next(err)
+    if (result.rows.length > 0) {
+      res.status(200).json(result.rows);
+    } else {
+      next(createError(404, "Students not Found"));
     }
-}
+  } catch (err) {
+    next(err);
+  }
+};
 
-// Fetch all Students Controller
+// Fetch all Students per Stream Controller
 export const getAllStudentsPerStream = async (req, res, next) => {
+  const { form, stream_id, year } = req.body;
 
-    const { form, stream_id } = req.body
+  try {
+    if (!form || !stream_id || !year)
+      return next(createError(400, "Missing required parameters!"));
 
-    try {
-        // Validate input more thoroughly
-        if (!form || !stream_id) return next(createError(400, 'Missing required parameters!'))
-        // More strict sanitization
-        const sanitizedForm = sanitizeStringVariables(form)
-    
-        // Validate inputs against stricter regex pattern
-        const validFormPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validFormPattern.test(sanitizedForm)) return next(createError(400, "Invalid Form input!"))
-    
-        const validStreamIdPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validStreamIdPattern.test(stream_id))
-          return next(createError(400, "Invalid Stream ID input!"));
-    
-        // Restrict table names to a predefined list
-        const allowedTables = ['students_form_1', 'students_form_2', 'students_form_3', 'students_form_4']
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-        // Students Table
-        const studentsTable = `students_form_${sanitizedForm}`
+    const validFormPattern = /^[a-z0-9_]+$/i;
+    if (!validFormPattern.test(sanitizedForm))
+      return next(createError(400, "Invalid Form input!"));
 
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(studentsTable)) return next(createError(400, 'Invalid form!'))
+    const validStreamIdPattern = /^[a-z0-9_]+$/i;
+    if (!validStreamIdPattern.test(stream_id))
+      return next(createError(400, "Invalid Stream ID input!"));
 
-        const result = await pool.query(`SELECT * FROM ${studentsTable} WHERE stream_id = $1`, [stream_id])
+    // Validate form is between 1-4
+    if (!["1", "2", "3", "4"].includes(sanitizedForm))
+      return next(createError(400, "Invalid form! Must be 1-4"));
 
-        if(result.rows.length > 0){
-            res.status(200).json(result.rows)
-        }else{
-            next(createError(404, 'Student not Found'))
-        }
-        
-    } catch (err) {
-        next(err)
+    const result = await pool.query(
+      `SELECT * FROM students 
+             WHERE current_form = $1 AND stream_id = $2 AND current_year = $3`,
+      [sanitizedForm, stream_id, sanitizedYear]
+    );
+
+    if (result.rows.length > 0) {
+      res.status(200).json(result.rows);
+    } else {
+      next(createError(404, "Students not Found"));
     }
-}
+  } catch (err) {
+    next(err);
+  }
+};
 
-// Fetch all Students Controller
-
-// Predefined allowed tables for security
-const ALLOWED_TABLES = new Set([
-  "students_form_1",
-  "students_form_2",
-  "students_form_3",
-  "students_form_4",
-]);
-
-const isValidFormNumber = (form) => /^[1-4]$/.test(form);
-
+// Fetch all Students across multiple forms
 export const getAllFormsStudents = async (req, res, next) => {
   const { year, forms, term, events_data } = req.body;
 
@@ -223,77 +270,43 @@ export const getAllFormsStudents = async (req, res, next) => {
       }
     }
 
-    const validatedForms = [];
-    for (const form of forms) {
-      const sanitizedForm = sanitizeStringVariables(form.toString());
-      if (!isValidFormNumber(sanitizedForm)) {
-        return next(createError(400, `Invalid form number: ${form}`));
-      }
-
-      const tableName = `students_form_${sanitizedForm}`;
-      if (!ALLOWED_TABLES.has(tableName)) {
-        return next(createError(400, `Invalid form: ${form}`));
-      }
-
-      validatedForms.push(tableName);
+    // Validate forms are between 1-4
+    const validForms = forms.filter((form) =>
+      ["1", "2", "3", "4"].includes(form.toString())
+    );
+    if (validForms.length === 0) {
+      return next(createError(400, "No valid forms provided (must be 1-4)"));
     }
 
-    const uniqueTables = [...new Set(validatedForms)];
     const client = await pool.connect();
-
     try {
       await client.query("BEGIN");
 
-      const allStudents = [];
-      const errors = [];
-
-      for (const table of uniqueTables) {
-        try {
-          const formNumber = table.split("_").pop();
-          const queryText = `
-            SELECT *, $1::text AS year, $2::text AS form
-            FROM ${table}
-            WHERE year = $1
-          `;
-          const result = await client.query(queryText, [year, formNumber]);
-
-          if (result.rows.length > 0) {
-            allStudents.push(...result.rows);
-          }
-        } catch (err) {
-          errors.push(`Error querying ${table}: ${err.message}`);
-        }
-      }
+      const result = await client.query(
+        `SELECT *, $1::integer AS year, current_form AS form
+                 FROM students 
+                 WHERE current_year = $1 AND current_form = ANY($2)`,
+        [year, validForms]
+      );
 
       await client.query("COMMIT");
 
-      if (allStudents.length > 0) {
+      if (result.rows.length > 0) {
         const data = {
-            year,
-            term,
-            events_data,
-            student_data: allStudents,
-          }
-          return data
-        // res.status(200).json({
-        //   success: true,
-        //   count: allStudents.length,
-        //   data: {
-        //     year,
-        //     term,
-        //     events_data,
-        //     student_data: allStudents,
-        //   },
-        //   errors: errors.length > 0 ? errors : undefined,
-        // });
+          year,
+          term,
+          events_data,
+          student_data: result.rows,
+        };
+        return data;
       } else {
         return res.status(404).json({
           success: false,
           message: "No students found in any of the specified forms",
-          errors,
         });
       }
     } catch (err) {
+      console.log(err)
       await client.query("ROLLBACK");
       throw err;
     } finally {
@@ -306,111 +319,144 @@ export const getAllFormsStudents = async (req, res, next) => {
 
 // Update a Student Controller
 export const updateStudent = async (req, res, next) => {
-    const { fname, mname, lname, sex, dob, stream_id, kcpe_marks, form, year, phone, address } = req.body
-    const { student_id } = req.params
-    // console.log(fname, mname, lname, sex, dob, stream_id, kcpe_marks, form, year, phone, address, student_id)
+  const {
+    fname,
+    mname,
+    lname,
+    sex,
+    dob,
+    stream_id,
+    kcpe_marks,
+    form,
+    year_of_enrolment,
+    phone,
+    address,
+    upi_number,
+  } = req.body;
+  
+  const { student_id } = req.params;
 
-    try {
-        // Validate input more thoroughly
-        if (!student_id || !fname || !mname|| !lname || !sex || !dob || !stream_id|| !kcpe_marks || !year || !phone) return next(createError(400, 'Missing required parameters!'))
-        
-        // More strict sanitization
-        const sanitizedFName = sanitizeStringVariables(fname)
-        const sanitizedMName = sanitizeStringVariables(mname)
-        const sanitizedLName = sanitizeStringVariables(lname)
-        const sanitizedSex = sanitizeStringVariables(sex)
-        const sanitizedDOB = sanitizeStringVariables(dob)
-        const sanitizedForm = sanitizeStringVariables(form)
-        const sanitizedYear = sanitizeStringVariables(year)
+  try {
+    if (
+      !student_id ||
+      !fname ||
+      !mname ||
+      !lname ||
+      !sex ||
+      !dob ||
+      !stream_id ||
+      !kcpe_marks ||
+      !year_of_enrolment ||
+      !phone
+    )
+      return next(createError(400, "Missing required parameters!"));
 
-        // Validate inputs against stricter regex pattern
-        const validPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validPattern.test(sanitizedFName) || 
-            !validPattern.test(sanitizedMName) || 
-            !validPattern.test(sanitizedLName) || 
-            !validPattern.test(sanitizedSex) || 
-            !validPattern.test(sanitizedDOB) || 
-            !validPattern.test(stream_id) || 
-            !validPattern.test(kcpe_marks) || 
-            !validPattern.test(sanitizedForm) || 
-            !validPattern.test(sanitizedYear) || 
-            !validPattern.test(phone) || 
-            !validPattern.test(address))
-        return next(createError(400, "Invalid inputs!"))
+    const sanitizedFName = sanitizeStringVariables(fname);
+    const sanitizedMName = sanitizeStringVariables(mname);
+    const sanitizedLName = sanitizeStringVariables(lname);
+    const sanitizedSex = sanitizeStringVariables(sex);
+    const sanitizedDOB = sanitizeStringVariables(dob);
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year_of_enrolment);
+    const sanitizedUPI = sanitizeStringVariables(upi_number);
 
-        const validIdPattern = /^[0-9_]+$/ // Case insensitive, only alphanumeric + underscore
-        if (!validIdPattern.test(student_id)) return next(createError(400, "Invalid Student Reg No!"))
-        
-        // Restrict table names to a predefined list
-        const allowedTables = ['students_form_1', 'students_form_2', 'students_form_3', 'students_form_4']
+    const validPattern = /^[a-z0-9_]+$/i;
+    if (
+      !validPattern.test(sanitizedFName) ||
+      !validPattern.test(sanitizedMName) ||
+      !validPattern.test(sanitizedLName) ||
+      !validPattern.test(sanitizedSex) ||
+      !validPattern.test(sanitizedDOB) ||
+      !validPattern.test(stream_id) ||
+      !validPattern.test(kcpe_marks) ||
+      !validPattern.test(sanitizedForm) ||
+      !validPattern.test(sanitizedYear) ||
+      !validPattern.test(sanitizedUPI) ||
+      !validPattern.test(phone) ||
+      !validPattern.test(address)
+    )
+      return next(createError(400, "Invalid inputs!"));
 
-        // Students Table
-        const studentsTable = `students_form_${sanitizedForm}`
-   
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(studentsTable)) return next(createError(400, 'Invalid form!'))
+    const validIdPattern = /^[0-9_]+$/;
+    if (!validIdPattern.test(student_id))
+      return next(createError(400, "Invalid Student Reg No!"));
 
-        const result = await pool.query(
-            `UPDATE ${studentsTable} SET fname = $1, mname = $2, lname = $3, sex = $4, dob = $5,  stream_id = $6, kcpe_marks = $7, year = $8, phone = $9, address = $10 WHERE id = $11 RETURNING *`,
-            [sanitizedFName, sanitizedMName, sanitizedLName, sanitizedSex, sanitizedDOB, stream_id, kcpe_marks, sanitizedYear, phone, address, student_id]
-        )
+    // Validate form is between 1-4
+    if (!["1", "2", "3", "4"].includes(sanitizedForm))
+      return next(createError(400, "Invalid form! Must be 1-4"));
 
-        if(result.rows.length > 0){
-            res.status(201).json(result.rows)
-        }else{
-            next(404, 'Student not Found.')
-        }
+    const result = await pool.query(
+      `UPDATE students SET 
+                fname = $1, mname = $2, lname = $3, sex = $4, dob = $5, 
+                stream_id = $6, kcpe_marks = $7, current_form = $8, year_of_enrolment = $9, 
+                phone = $10, address = $11, upi_number = $12 
+             WHERE id = $13 
+             RETURNING *`,
+      [
+        sanitizedFName,
+        sanitizedMName,
+        sanitizedLName,
+        sanitizedSex,
+        sanitizedDOB,
+        stream_id,
+        kcpe_marks,
+        sanitizedForm,
+        sanitizedYear,
+        phone,
+        address,
+        upi_number,
+        student_id,
+      ]
+    );
 
-    } catch (err) {
-        next(err)
+    if (result.rows.length > 0) {
+      res.status(200).json(result.rows[0]);
+    } else {
+      next(createError(404, "Student not Found."));
     }
-}
+  } catch (err) {
+    console.log(err)
+    next(err);
+  }
+};
 
 // Delete a Student
 export const deleteStudent = async (req, res, next) => {
+  const { form, year } = req.body;
+  const { student_id } = req.params;
 
-    const {form} = req.body
-    const {student_id} = req.params
+  try {
+    if (!form || !student_id || !year)
+      return next(createError(400, "Missing required parameters!"));
 
-    try {
+    const sanitizedForm = sanitizeStringVariables(form);
+    const sanitizedYear = sanitizeStringVariables(year);
 
-        // Validate input more thoroughly
-        if(!form) return next(createError(400, 'Missing form required parameters!'))
-        if(!student_id) return next(createError(400, 'Missing student required parameters!'))
+    const validFormPattern = /^[a-z0-9_]+$/i;
+    if (!validFormPattern.test(sanitizedForm))
+      return next(createError(400, "Invalid Form input!"));
 
-        if (!form || !student_id ) return next(createError(400, 'Missing required parameters!'))
+    const validIdPattern = /^[0-9_]+$/;
+    if (!validIdPattern.test(student_id))
+      return next(createError(400, "Invalid Student Reg No!"));
 
-        // More strict sanitization
-        const sanitizedForm = sanitizeStringVariables(form)
-        
-        // Validate inputs against stricter regex pattern
-        const validFormPattern = /^[a-z0-9_]+$/i // Case insensitive, only alphanumeric + underscore
-        if (!validFormPattern.test(sanitizedForm)) return next(createError(400, "Invalid Form input!"))
-    
-        const validIdPattern = /^[0-9_]+$/ // Case insensitive, only alphanumeric + underscore
-        if (!validIdPattern.test(student_id)) return next(createError(400, "Invalid Student Reg No!"))
-        
-        // Restrict table names to a predefined list
-        const allowedTables = ['students_form_1', 'students_form_2', 'students_form_3', 'students_form_4']
-    
-        // Students Table
-        const studentsTable = `students_form_${sanitizedForm}`
-    
-        // Ensure the sanitized table name exists in allowed table list
-        if(!allowedTables.includes(studentsTable)) return next(createError(400, 'Invalid form!'))
+    // Validate form is between 1-4
+    if (!["1", "2", "3", "4"].includes(sanitizedForm))
+      return next(createError(400, "Invalid form! Must be 1-4"));
 
-        const result = await pool.query(
-            `DELETE FROM ${studentsTable} WHERE id = $1 RETURNING *`,
-            [student_id]
-        )
+    const result = await pool.query(
+      `DELETE FROM students 
+             WHERE id = $1 AND current_form = $2 AND current_year = $3 
+             RETURNING *`,
+      [student_id, sanitizedForm, sanitizedYear]
+    );
 
-        if(result.rows.length > 0){
-            res.status(204).send()
-        }else{
-            next(createError(404, 'Student not Found.'))
-        }
-
-    } catch (err) {
-        next(err)
+    if (result.rows.length > 0) {
+      res.status(204).send();
+    } else {
+      next(createError(404, "Student not Found."));
     }
-}
+  } catch (err) {
+    next(err);
+  }
+};

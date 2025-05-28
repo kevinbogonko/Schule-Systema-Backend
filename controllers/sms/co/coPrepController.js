@@ -60,7 +60,6 @@ export const coSMSPrep = async (req, res, next) => {
     };
 
     return payload
-    // res.json(payload);
   } catch (err) {
     next(err);
   }

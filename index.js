@@ -18,6 +18,7 @@ import particularRoute from "./Routes/particulars/particularRoute.js"
 import report from "./Routes/reports/reportform/testPdf.js"
 import marksheetReport from "./Routes/reports/marksheet/marksheetPdfRoute.js"
 import marklistReport from "./Routes/reports/marklist/marklistRoute.js"
+import markanalysisReport from "./Routes/reports/analysis/markanalysisRoute.js"
 
 
 import dotenv from 'dotenv'
@@ -76,6 +77,7 @@ app.use("/api/studentreport", studentReportRoute)
 app.use("/api/pdfr", report) // Not complete
 app.use("/api/report", marksheetReport); // Not complete FOR MARKSHEET
 app.use("/api/report", marklistReport); // Not complete FOR MARKSHEET
+app.use("/api/report", markanalysisReport); // Not complete FOR ANALYSIS
 
 
 app.use("/api/teacher/", teacherRoute)

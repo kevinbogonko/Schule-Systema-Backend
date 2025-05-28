@@ -13,6 +13,7 @@ import {
   paperSetupUpdate,
   procesMarks,
   StudentMarkListReady,
+  StudentAttemptedExams,
 } from "../../controllers/exams/ruExamController.js";
 
 // Initialising Router Instance
@@ -34,5 +35,9 @@ router.put("/updatemark", updateStudentMark)
 router.put("/updatemarks", updateAllStudentMark)
 router.post("/processmarks", procesMarks)
 router.post("/marklist", StudentMarkListReady);
+
+// for student
+router.post("/attemptedexam", StudentAttemptedExams);
+
 
 export default router

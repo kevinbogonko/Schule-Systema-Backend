@@ -19,7 +19,7 @@ export const addExam = async (req, res, next) => {
     const midTermTable = `mid_term_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`;
     const endTermTable = `end_term_${sanitizedTerm}_form_${sanitizedForm}_${sanitizedYear}`;
     const examsTable = `form_${sanitizedForm}_exams`;
-    const studentsTable = `students_form_${sanitizedForm}`;
+    const studentsTable = `students`;
     const subjectsTable = `subjects_form_${sanitizedForm}`;
 
     const examTablesExist = await checkExamTablesExist(
@@ -30,7 +30,9 @@ export const addExam = async (req, res, next) => {
     if (examTablesExist) {
       await updateExistingExamTables(
         [openerTermTable, midTermTable, endTermTable],
-        studentsTable
+        studentsTable,
+        sanitizedForm,
+        sanitizedYear
       );
       return res.status(200).json({
         success: true,
@@ -93,22 +95,25 @@ async function checkExamTablesExist(examTables, examsTable) {
   }
 }
 
-async function updateExistingExamTables(examTables, studentsTable) {
+async function updateExistingExamTables(examTables, studentsTable, form, year) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     const { rows: students } = await client.query(
-      `SELECT id FROM ${studentsTable}`
+      `SELECT id FROM ${studentsTable} WHERE current_form = $1 AND current_year = $2`,
+      [form, year]
     );
 
     for (const table of examTables) {
       const { rows: missingStudents } = await client.query(
-        `SELECT id 
+        `SELECT s.id 
          FROM ${studentsTable} s
-         WHERE NOT EXISTS (
+         WHERE s.current_form = $1 AND s.current_year = $2
+         AND NOT EXISTS (
            SELECT 1 FROM ${table} e WHERE e.id = s.id
-         )`
+         )`,
+        [form, year]
       );
 
       if (missingStudents.length > 0) {
@@ -174,7 +179,6 @@ async function createNewExamTables(
       throw createError(400, "No subjects found for this form");
     }
 
-    // Modified subject columns to include _1, _2, _3
     const subjectColumns = subjects
       .map(
         (sub) => `"${sanitizeStringVariables(sub.id)}" INT DEFAULT 0,
@@ -203,7 +207,6 @@ async function createNewExamTables(
     await createExamTable(midTermTable);
     await createExamTable(endTermTable);
 
-    // Modified exam registration with term & year
     await client.query(
       `INSERT INTO ${examsTable} (exam_name, term, year, created_at) 
        VALUES ($1, $2, $3, NOW()), ($4, $5, $6, NOW()), ($7, $8, $9, NOW())`,
@@ -220,7 +223,6 @@ async function createNewExamTables(
       ]
     );
 
-    // Create grading and paper setup tables for each exam
     await createGradingTable(
       client,
       `grading_${openerTermTable}`,
@@ -252,7 +254,8 @@ async function createNewExamTables(
 
       while (hasMore) {
         const { rows: students } = await client.query(
-          `SELECT id FROM ${studentsTable} ORDER BY id LIMIT ${batchSize} OFFSET ${offset}`
+          `SELECT id FROM ${studentsTable} WHERE current_form = $1 AND current_year = $2 ORDER BY id LIMIT ${batchSize} OFFSET ${offset}`,
+          [form, year]
         );
 
         if (students.length === 0) {
