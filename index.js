@@ -60,6 +60,15 @@ app.use(express.urlencoded({
     extended : true
 }))
 
+
+// Serve static files from the React app build folder
+app.use(express.static(path.join(__dirname, "build")));
+
+// Handle all other routes by serving React's index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "build", "index.html"));
+});
+
 // Static files
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')))
 
