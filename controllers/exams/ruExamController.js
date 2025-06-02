@@ -1521,6 +1521,7 @@ export const StudentMarkAnalysis = async (req, res, next) => {
       const subjectData = {
         code: subject.id.toString(),
         name: subjectName,
+        init: subjectCode,
         optional: false, // You may need to adjust this based on your data
         instructor: "To be assigned", // You can modify this as needed
         streams: [],
