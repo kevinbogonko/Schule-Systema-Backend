@@ -70,6 +70,10 @@ app.use(express.urlencoded({
 //   res.sendFile(path.join(__dirname, "build", "index.html"));
 // });
 
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../client/build')));
+
 // Static files
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')))
 
@@ -102,6 +106,11 @@ app.use("/api/timetable/", timetableRoute); // Not complete
 
 
 app.use("/api/sms/", SMSResRoute);
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+  });
 
 
 // Error Handling Middleware
