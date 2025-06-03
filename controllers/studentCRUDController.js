@@ -14,7 +14,7 @@ export const addStudent = async (req, res, next) => {
     stream_id,
     kcpe_marks,
     form,
-    year,
+    // year,
     phone,
     address,
   } = req.body;
@@ -30,10 +30,11 @@ export const addStudent = async (req, res, next) => {
       !dob ||
       !stream_id ||
       !kcpe_marks ||
-      !year ||
+      // !year ||
       !phone
     )
       return next(createError(400, "Missing required parameters!"));
+      const year = 2025
 
     // More strict sanitization
     const sanitizedFName = sanitizeStringVariables(fname);
@@ -71,8 +72,8 @@ export const addStudent = async (req, res, next) => {
 
     const result = await pool.query(
       `INSERT INTO students 
-             (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, current_form, current_year, phone, address)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+             (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, year_of_enrolment, current_form, current_year, phone, address)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
              RETURNING *`,
       [
         id,
@@ -83,6 +84,7 @@ export const addStudent = async (req, res, next) => {
         sanitizedDOB,
         stream_id,
         kcpe_marks,
+        sanitizedYear,
         sanitizedForm,
         sanitizedYear,
         phone,
@@ -426,29 +428,29 @@ export const deleteStudent = async (req, res, next) => {
   const { student_id } = req.params;
 
   try {
-    if (!form || !student_id || !year)
+    if (!student_id)
       return next(createError(400, "Missing required parameters!"));
 
-    const sanitizedForm = sanitizeStringVariables(form);
-    const sanitizedYear = sanitizeStringVariables(year);
+    // const sanitizedForm = sanitizeStringVariables(form);
+    // const sanitizedYear = sanitizeStringVariables(year);
 
-    const validFormPattern = /^[a-z0-9_]+$/i;
-    if (!validFormPattern.test(sanitizedForm))
-      return next(createError(400, "Invalid Form input!"));
+    // const validFormPattern = /^[a-z0-9_]+$/i;
+    // if (!validFormPattern.test(sanitizedForm))
+    //   return next(createError(400, "Invalid Form input!"));
 
     const validIdPattern = /^[0-9_]+$/;
     if (!validIdPattern.test(student_id))
       return next(createError(400, "Invalid Student Reg No!"));
 
     // Validate form is between 1-4
-    if (!["1", "2", "3", "4"].includes(sanitizedForm))
-      return next(createError(400, "Invalid form! Must be 1-4"));
+    // if (!["1", "2", "3", "4"].includes(sanitizedForm))
+    //   return next(createError(400, "Invalid form! Must be 1-4"));
 
     const result = await pool.query(
       `DELETE FROM students 
-             WHERE id = $1 AND current_form = $2 AND current_year = $3 
+             WHERE id = $1
              RETURNING *`,
-      [student_id, sanitizedForm, sanitizedYear]
+      [student_id]
     );
 
     if (result.rows.length > 0) {

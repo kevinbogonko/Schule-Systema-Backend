@@ -167,6 +167,7 @@ export const userLogin = async (req, res, next) => {
     });
 
     res.cookie("XSRF-TOKEN", csrfToken, {
+      httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       maxAge: 15 * 60 * 1000, // 15 minutes
@@ -189,6 +190,7 @@ export const userLogin = async (req, res, next) => {
     return next(createError(500, "Authentication failed"));
   }
 };
+
 // Refresh Token Controller
 export const refreshAccessToken = async (req, res, next) => {
   const refreshToken = req.cookies.refresh_token;
