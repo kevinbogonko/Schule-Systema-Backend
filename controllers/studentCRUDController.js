@@ -14,10 +14,12 @@ export const addStudent = async (req, res, next) => {
     stream_id,
     kcpe_marks,
     form,
-    // year,
+    year,
     phone,
     address,
   } = req.body;
+
+  const client = await pool.connect();
 
   try {
     // Validate input more thoroughly
@@ -30,11 +32,10 @@ export const addStudent = async (req, res, next) => {
       !dob ||
       !stream_id ||
       !kcpe_marks ||
-      // !year ||
+      !year ||
       !phone
     )
       return next(createError(400, "Missing required parameters!"));
-      const year = 2025
 
     // More strict sanitization
     const sanitizedFName = sanitizeStringVariables(fname);
@@ -70,11 +71,14 @@ export const addStudent = async (req, res, next) => {
     if (!["1", "2", "3", "4"].includes(sanitizedForm))
       return next(createError(400, "Invalid form! Must be 1-4"));
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    // Insert student record
+    const studentResult = await client.query(
       `INSERT INTO students 
-             (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, year_of_enrolment, current_form, current_year, phone, address)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-             RETURNING *`,
+       (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, year_of_enrolment, current_form, current_year, phone, address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+       RETURNING *`,
       [
         id,
         sanitizedFName,
@@ -91,9 +95,28 @@ export const addStudent = async (req, res, next) => {
         address,
       ]
     );
-    res.status(201).json(result.rows[0]);
+
+    // Insert selective record
+    await client.query(
+      `INSERT INTO selectives 
+       (student_id, form, stream_id, year) 
+       VALUES ($1, $2, $3, $4)`,
+      [id, sanitizedForm, stream_id, sanitizedYear]
+    );
+
+    await client.query("COMMIT");
+
+    res.status(201).json(studentResult.rows[0]);
   } catch (err) {
+    await client.query("ROLLBACK");
+
+    if (err.code === "23505") {
+      return next(createError(400, "Student with this ID already exists"));
+    }
+
     next(err);
+  } finally {
+    client.release();
   }
 };
 
@@ -335,7 +358,7 @@ export const updateStudent = async (req, res, next) => {
     address,
     upi_number,
   } = req.body;
-  
+
   const { student_id } = req.params;
 
   try {
@@ -389,11 +412,11 @@ export const updateStudent = async (req, res, next) => {
 
     const result = await pool.query(
       `UPDATE students SET 
-                fname = $1, mname = $2, lname = $3, sex = $4, dob = $5, 
-                stream_id = $6, kcpe_marks = $7, current_form = $8, year_of_enrolment = $9, 
-                phone = $10, address = $11, upi_number = $12 
-             WHERE id = $13 
-             RETURNING *`,
+        fname = $1, mname = $2, lname = $3, sex = $4, dob = $5,
+        stream_id = $6, kcpe_marks = $7, current_form = $8, year_of_enrolment = $9,
+        phone = $10, address = $11, upi_number = $12
+       WHERE id = $13
+       RETURNING *`,
       [
         sanitizedFName,
         sanitizedMName,
@@ -406,7 +429,7 @@ export const updateStudent = async (req, res, next) => {
         sanitizedYear,
         phone,
         address,
-        upi_number,
+        sanitizedUPI,
         student_id,
       ]
     );
@@ -417,7 +440,7 @@ export const updateStudent = async (req, res, next) => {
       next(createError(404, "Student not Found."));
     }
   } catch (err) {
-    console.log(err)
+    console.log(err);
     next(err);
   }
 };

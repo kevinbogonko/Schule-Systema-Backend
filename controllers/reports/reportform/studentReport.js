@@ -3,7 +3,7 @@ import { createError } from "../../../utils/ErrorHandler.js";
 import { sanitizeStringVariables } from "../../../utils/sanitizeString.js";
 
 export const studentReportMarks = async (req, res, next) => {
-  const { form, exams, formula, yearValue } = req.body;
+  const { form, exams, formula, yearValue, studentIds } = req.body;
 
   try {
     if (!form || !exams || !formula || !yearValue) {
@@ -38,18 +38,18 @@ export const studentReportMarks = async (req, res, next) => {
 
     // Grade point scale for AG grade (Forms 3 & 4)
     const gradePointScale = {
-      E: { min: 1, max: 7 },
-      "D-": { min: 8, max: 14 },
-      D: { min: 15, max: 21 },
-      "D+": { min: 22, max: 28 },
-      "C-": { min: 29, max: 35 },
-      C: { min: 36, max: 42 },
-      "C+": { min: 43, max: 49 },
-      "B-": { min: 50, max: 56 },
-      B: { min: 57, max: 63 },
-      "B+": { min: 64, max: 70 },
-      "A-": { min: 71, max: 77 },
-      A: { min: 78, max: 84 },
+      E: { min: 1, max: 10 },
+      "D-": { min: 11, max: 17 },
+      D: { min: 18, max: 24 },
+      "D+": { min: 25, max: 31 },
+      "C-": { min: 32, max: 38 },
+      C: { min: 39, max: 45 },
+      "C+": { min: 46, max: 52 },
+      "B-": { min: 53, max: 59 },
+      B: { min: 60, max: 66 },
+      "B+": { min: 67, max: 73 },
+      "A-": { min: 74, max: 80 },
+      A: { min: 81, max: 84 },
     };
 
     // Define subject groups
@@ -857,6 +857,20 @@ export const studentReportMarks = async (req, res, next) => {
           principalRemark = principalRemarkEntry.label;
         }
 
+        // Get student image path
+        let imagePath = '/images/defaults/user_p.webp'; // Default value
+        try {
+          const imageRes = await pool.query(
+            "SELECT path FROM student_images WHERE id = $1",
+            [student.id]
+          );
+          if (imageRes.rows.length > 0 && imageRes.rows[0].path) {
+            imagePath = imageRes.rows[0].path;
+          }
+        } catch (err) {
+          console.error("Error fetching student image:", err);
+        }
+
         return {
           id: student.id,
           name: student.name,
@@ -906,7 +920,7 @@ export const studentReportMarks = async (req, res, next) => {
               },
             },
           ],
-          image_path: `/student_images/${student.id}.jpg`,
+          image_path: imagePath,
         };
       })
     );
@@ -918,7 +932,7 @@ export const studentReportMarks = async (req, res, next) => {
         { motto: particulars.motto },
         { address: particulars.address },
         { phone: particulars.phone },
-        { logo: particulars.logo_path || "/school_logo.png" },
+        { logo: particulars.logo_path || "/school_logo.png"}
       ],
       examDetails: {
         form: form,
@@ -927,6 +941,7 @@ export const studentReportMarks = async (req, res, next) => {
         year: year,
       },
       studentResults: studentResults,
+      studentIds : studentIds
     };
 
     // res.status(200).json(response);

@@ -4,6 +4,7 @@ import { studentResultsPrep } from "../../controllers/sms/results/smsResultsPrep
 import {sendStudentResultsSMS } from "../../controllers/sms/results/sendResultSMSController.js"
 import { getSMSResultLogs } from "../../controllers/sms/logs/smsLogsController.js";
 import { sendCOSMS } from "../../controllers/sms/co/sendCOSMSController.js";
+import { sendGenericCOSMS } from "../../controllers/sms/generic/sendGenericSMS.js";
 
 
 const router = express.Router()
@@ -16,6 +17,9 @@ router.post("/sendresultsms", sendStudentResultsSMS); // For sending Student Res
 
 // CO SMS
 router.post("/sendcosms", sendCOSMS); // Send CO SMS Messages
+
+// GENERIC SMS
+router.post("/sendgensms", sendGenericCOSMS); // Send Generic SMS Messages
 
 // SMS LOGS
 

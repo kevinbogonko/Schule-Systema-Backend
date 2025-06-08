@@ -56,7 +56,7 @@ export const coSMSPrep = async (req, res, next) => {
     const payload = {
       count: smslist.length,
       smslist,
-      unival : "cobulksmstest"
+      unival : "cobulksms"
     };
 
     return payload

@@ -1,7 +1,6 @@
 import express from 'express'
 // import { verifyToken } from '../utils/verifyToken.js'
 import { createUser, deleteUser, getUser, getUsers, updateUser } from '../controllers/userController.js'
-
 // Initialising Router Instance
 const router = express.Router()
 

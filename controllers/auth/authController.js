@@ -105,6 +105,9 @@ export const userLogin = async (req, res, next) => {
       return next(createError(401, "Invalid credentials"));
     }
 
+    const accessJti = uuidv4();
+    const refreshJti = uuidv4();
+
     const accessToken = jwt.sign(
       {
         user: {
@@ -113,7 +116,7 @@ export const userLogin = async (req, res, next) => {
           username: user.username,
           role: user.role,
         },
-        jti: uuidv4(),
+        jti: accessJti,
       },
       process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
       {
@@ -130,7 +133,7 @@ export const userLogin = async (req, res, next) => {
           user_id: user.user_id,
         },
         tokenVersion: newTokenVersion,
-        jti: uuidv4(),
+        jti: refreshJti,
       },
       process.env.JWT_REFRESH_TOKEN_SECRET_KEY,
       {
@@ -140,7 +143,7 @@ export const userLogin = async (req, res, next) => {
       }
     );
 
-    const tokenId = uuidv4();
+    const tokenId = refreshJti; // Use the refresh jti as token_id
     await pool.query(
       `INSERT INTO refresh_tokens
        (token_id, user_id, token, user_agent, ip_address, expires_at)
@@ -155,7 +158,7 @@ export const userLogin = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 15 * 60 * 1000, // ✅ 15 minutes
     });
 
     res.cookie("refresh_token", refreshToken, {
@@ -163,14 +166,14 @@ export const userLogin = async (req, res, next) => {
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       path: "/auth/refresh",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // ✅ 7 days
     });
 
     res.cookie("XSRF-TOKEN", csrfToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 15 * 60 * 1000,
     });
 
     res.status(200).json({
@@ -199,13 +202,29 @@ export const refreshAccessToken = async (req, res, next) => {
     return next(createError(401, "Authentication required"));
   }
 
+  let decoded;
+
   try {
-    const decoded = jwt.verify(
+    decoded = jwt.verify(
       refreshToken,
       process.env.JWT_REFRESH_TOKEN_SECRET_KEY
     );
+  } catch (err) {
+    res.clearCookie("refresh_token");
+    res.clearCookie("access_token");
 
-    // Get user data including token_version
+    if (err.name === "TokenExpiredError" && err.expiredAt) {
+      await pool.query(
+        "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_id = $1",
+        [decoded?.jti] // Optional chaining in case of failure
+      );
+      return next(createError(401, "Session expired"));
+    }
+
+    return next(createError(403, "Invalid token"));
+  }
+
+  try {
     const userQuery = await pool.query(
       `SELECT id, user_id, username, role, token_version FROM users WHERE id = $1`,
       [decoded.user.id]
@@ -219,16 +238,14 @@ export const refreshAccessToken = async (req, res, next) => {
 
     const user = userQuery.rows[0];
 
-    // Verify token version matches
     if (decoded.tokenVersion !== user.token_version) {
       res.clearCookie("refresh_token");
       res.clearCookie("access_token");
       return next(createError(403, "Invalid token"));
     }
 
-    // Check token in database
     const tokenRecord = await pool.query(
-      `SELECT revoked_at FROM refresh_tokens 
+      `SELECT revoked_at FROM refresh_tokens
        WHERE token_id = $1 AND user_id = $2`,
       [decoded.jti, decoded.user.id]
     );
@@ -243,7 +260,7 @@ export const refreshAccessToken = async (req, res, next) => {
       {
         user: {
           id: user.id,
-          user_id : user.user_id,
+          user_id: user.user_id,
           username: user.username,
           role: user.role,
         },
@@ -252,17 +269,16 @@ export const refreshAccessToken = async (req, res, next) => {
       process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
       {
         expiresIn: "15m",
-        issuer: "Kimaru",
-        audience: "Kimaru",
+        issuer: process.env.BACKEND_BASE_URL,
+        audience: process.env.FRONTEND_BASE_URL,
       }
     );
 
-    // Set new access token in cookie
     res.cookie("access_token", newAccessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 15 * 60 * 1000,
     });
 
     res.status(200).json({
@@ -274,18 +290,8 @@ export const refreshAccessToken = async (req, res, next) => {
       },
     });
   } catch (err) {
-    res.clearCookie("refresh_token");
-    res.clearCookie("access_token");
-
-    if (err.name === "TokenExpiredError") {
-      await pool.query(
-        "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_id = $1",
-        [decoded?.jti]
-      );
-      return next(createError(401, "Session expired"));
-    }
-
-    next(createError(403, "Invalid token"));
+    console.error("Token refresh error:", err);
+    return next(createError(500, "Token refresh failed"));
   }
 };
 
