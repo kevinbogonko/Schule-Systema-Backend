@@ -157,22 +157,23 @@ export const userLogin = async (req, res, next) => {
     res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
-      maxAge: 15 * 60 * 1000, // ✅ 15 minutes
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+      path: "/", 
+      maxAge: 15 * 60 * 1000,
     });
 
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-      path: "/auth/refresh",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // ✅ 7 days
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+      path: "/", 
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.cookie("XSRF-TOKEN", csrfToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
       maxAge: 15 * 60 * 1000,
     });
 
@@ -384,35 +385,35 @@ export const userLogout = async (req, res, next) => {
         await pool.query('COMMIT');
 
         // 3. Clear the refresh and access token cookie
-        res.clearCookie('access_token', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            path: '/', // MUST match path used when setting the cookie
+        res.clearCookie("access_token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+          path: "/", 
         });
 
-        res.clearCookie('refresh_token', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            path: '/auth/refresh', // MUST match path used when setting the cookie
+        res.clearCookie("refresh_token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+          path: "/", 
         });
 
         // Clear XSRF-TOKEN 
-        res.clearCookie('XSRF-TOKEN', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            path: '/', // MUST match path used when setting the cookie
+        res.clearCookie("XSRF-TOKEN", {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+          path: "/", 
         });
 
         // Optional: force-expire cookie just in case
-        res.cookie('refresh_token', '', {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            path: '/auth/refresh',
-            expires: new Date(0),
+        res.cookie("refresh_token", "", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+          path: "/", 
+          expires: new Date(0),
         });
 
         // 4. Tell frontend to clear local tokens
