@@ -157,14 +157,14 @@ export const userLogin = async (req, res, next) => {
     res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
       maxAge: 15 * 60 * 1000, // ✅ 15 minutes
     });
 
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       path: "/auth/refresh",
       maxAge: 7 * 24 * 60 * 60 * 1000, // ✅ 7 days
     });
@@ -172,7 +172,7 @@ export const userLogin = async (req, res, next) => {
     res.cookie("XSRF-TOKEN", csrfToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
       maxAge: 15 * 60 * 1000,
     });
 
@@ -277,7 +277,7 @@ export const refreshAccessToken = async (req, res, next) => {
     res.cookie("access_token", newAccessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
       maxAge: 15 * 60 * 1000,
     });
 
