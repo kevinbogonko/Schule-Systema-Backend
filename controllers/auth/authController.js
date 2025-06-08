@@ -170,10 +170,11 @@ export const userLogin = async (req, res, next) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.cookie("XSRF-TOKEN", csrfToken, {
+    res.cookie("__Host-XSRF-TOKEN", csrfToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax", 
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      path: "/", 
       maxAge: 15 * 60 * 1000,
     });
 
@@ -400,11 +401,11 @@ export const userLogout = async (req, res, next) => {
         });
 
         // Clear XSRF-TOKEN 
-        res.clearCookie("XSRF-TOKEN", {
+        res.clearCookie("__Host-TOKEN", {
           httpOnly: false,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax", 
-          path: "/", 
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+          path: "/",
         });
 
         // Optional: force-expire cookie just in case
