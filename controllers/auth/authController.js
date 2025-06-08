@@ -158,6 +158,7 @@ export const userLogin = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+      domain : process.env.NODE_ENV === "production" ? process.env.NODE_DOMAIN : process.env.BACKEND_BASE_URL,
       path: "/", 
       maxAge: 15 * 60 * 1000,
     });
@@ -165,16 +166,24 @@ export const userLogin = async (req, res, next) => {
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
-      path: "/", 
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      domain:
+        process.env.NODE_ENV === "production"
+          ? process.env.NODE_DOMAIN
+          : process.env.BACKEND_BASE_URL,
+      path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.cookie("__Host-XSRF-TOKEN", csrfToken, {
+    res.cookie("XSRF-TOKEN", csrfToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-      path: "/", 
+      domain:
+        process.env.NODE_ENV === "production"
+          ? process.env.NODE_DOMAIN
+          : process.env.BACKEND_BASE_URL,
+      path: "/",
       maxAge: 15 * 60 * 1000,
     });
 
@@ -280,6 +289,11 @@ export const refreshAccessToken = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
+      domain:
+        process.env.NODE_ENV === "production"
+          ? process.env.NODE_DOMAIN
+          : process.env.BACKEND_BASE_URL,
+      path: '/',
       maxAge: 15 * 60 * 1000,
     });
 
@@ -389,22 +403,34 @@ export const userLogout = async (req, res, next) => {
         res.clearCookie("access_token", {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
-          path: "/", 
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+          domain:
+            process.env.NODE_ENV === "production"
+              ? process.env.NODE_DOMAIN
+              : process.env.BACKEND_BASE_URL,
+          path: "/",
         });
 
         res.clearCookie("refresh_token", {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
-          path: "/", 
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+          domain:
+            process.env.NODE_ENV === "production"
+              ? process.env.NODE_DOMAIN
+              : process.env.BACKEND_BASE_URL,
+          path: "/",
         });
 
         // Clear XSRF-TOKEN 
-        res.clearCookie("__Host-TOKEN", {
+        res.clearCookie("XSRF-TOKEN", {
           httpOnly: false,
           secure: process.env.NODE_ENV === "production",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+          domain:
+            process.env.NODE_ENV === "production"
+              ? process.env.NODE_DOMAIN
+              : process.env.BACKEND_BASE_URL,
           path: "/",
         });
 
@@ -412,8 +438,12 @@ export const userLogout = async (req, res, next) => {
         res.cookie("refresh_token", "", {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
-          path: "/", 
+          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+          domain:
+            process.env.NODE_ENV === "production"
+              ? process.env.NODE_DOMAIN
+              : process.env.BACKEND_BASE_URL,
+          path: "/",
           expires: new Date(0),
         });
 
