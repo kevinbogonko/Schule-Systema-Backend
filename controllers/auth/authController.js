@@ -173,7 +173,7 @@ export const userLogin = async (req, res, next) => {
     res.cookie("XSRF-TOKEN", csrfToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax", 
       maxAge: 15 * 60 * 1000,
     });
 
@@ -403,7 +403,7 @@ export const userLogout = async (req, res, next) => {
         res.clearCookie("XSRF-TOKEN", {
           httpOnly: false,
           secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", 
+          sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax", 
           path: "/", 
         });
 

@@ -14,14 +14,9 @@ const isTokenRevoked = async (jti) => {
 // Middleware for protected routes
 export const verifyToken = async (req, res, next) => {
   try {
-    // Get token from Authorization header or cookie
-    const authHeader = req.headers.authorization;
-    const tokenFromHeader = authHeader?.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : null;
-    const tokenFromCookie = req.cookies?.access_token;
-
-    const token = tokenFromHeader || tokenFromCookie;
+    // Only use header token for API calls
+    const token =
+      req.headers.authorization?.split(" ")[1] || req.cookies.access_token;
 
     if (!token) {
       return next(createError(401, "Missing authorization token"));
@@ -29,10 +24,16 @@ export const verifyToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_TOKEN_SECRET_KEY);
 
-    const revoked = await isTokenRevoked(decoded.jti);
-    if (revoked) {
-      return next(createError(401, "This token has been revoked"));
+    // Verify CSRF token for non-GET requests
+    if (req.method !== "GET") {
+      const csrfToken = req.headers["x-xsrf-token"];
+      if (!csrfToken || csrfToken !== req.cookies["XSRF-TOKEN"]) {
+        return next(createError(403, "Invalid CSRF token"));
+      }
     }
+
+    const revoked = await isTokenRevoked(decoded.jti);
+    if (revoked) return next(createError(401, "Token revoked"));
 
     req.user = decoded;
     next();

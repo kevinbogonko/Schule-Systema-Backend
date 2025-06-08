@@ -53,6 +53,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_BASE_URL,
     credentials: true,
+    exposedHeaders: ['X-XSRF-TOKEN']
   })
 );
 app.use(cookieParser())
