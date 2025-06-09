@@ -67,9 +67,9 @@ app.use(express.urlencoded({
 app.use(express.static(path.join(__dirname, "dist")));
 
 // Catch-all: send index.html for any route that's not handled by static files or APIS
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'))
-})
+// app.get('*', (req, res) => {
+//     res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+// })
 
 // Static files
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')))
