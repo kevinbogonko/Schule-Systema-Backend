@@ -106,7 +106,7 @@ app.use("/api/sms/", SMSResRoute);
 
 // Handle all other routes by serving React's index.html
 app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "build", "index.html"));
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 // Error Handling Middleware
