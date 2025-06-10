@@ -66,11 +66,6 @@ app.use(express.urlencoded({
 // Serve static files from the React app build folder
 app.use(express.static(path.join(__dirname, "dist")));
 
-// Catch-all: send index.html for any route that's not handled by static files or APIS
-// app.get('*', (req, res) => {
-//     res.sendFile(path.join(__dirname, 'dist', 'index.html'))
-// })
-
 // Static files
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')))
 
@@ -104,9 +99,14 @@ app.use("/api/timetable/", timetableRoute); // Not complete
 
 app.use("/api/sms/", SMSResRoute);
 
+// Handle client-side routing
+app.get(['/', '/login', '/dashboard', '/dashboard/*'], (req, res) => {
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
+})
+
 // Handle all other routes by serving React's index.html
 app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "dist", "index.html"));
+    res.status(404).send('Not found')
 });
 
 // Error Handling Middleware
