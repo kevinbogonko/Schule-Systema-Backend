@@ -104,9 +104,14 @@ app.get(['/', '/login', '/dashboard', '/dashboard/*'], (req, res) => {
     res.sendFile(path.join(__dirname, "dist", "index.html"));
 })
 
+// Handle 404 for API route only
+app.use('/api/*', (req, res) => {
+    res.status(404).json({message : "API endpoint not found"})
+})
+
 // Handle all other routes by serving React's index.html
 app.get("*", (req, res) => {
-    res.status(404).send('Not found')
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 // Error Handling Middleware
