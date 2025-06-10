@@ -100,8 +100,12 @@ app.use("/api/timetable/", timetableRoute); // Not complete
 app.use("/api/sms/", SMSResRoute);
 
 // Handle client-side routing
-app.get(['/', '/login', '/dashboard', '/dashboard/*'], (req, res) => {
-    res.sendFile(path.join(__dirname, "dist", "index.html"));
+app.get('*', (req, res, next) => {
+    if(req.path.startsWith('/api')){
+        return next()
+    }else{
+        res.sendFile(path.join(__dirname, "dist", "index.html"));
+    }
 })
 
 // Handle 404 for API route only
@@ -109,10 +113,6 @@ app.use('/api/*', (req, res) => {
     res.status(404).json({message : "API endpoint not found"})
 })
 
-// Handle all other routes by serving React's index.html
-app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {
