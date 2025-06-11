@@ -95,6 +95,7 @@ app.use("/api/timetable/", timetableRoute); // Not complete
 
 app.use("/api/sms/", SMSResRoute);
 
+
 // Handle client-side routing
 // app.get('*', (req, res, next) => {
 //     if(req.path.startsWith('/api')){
