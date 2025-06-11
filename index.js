@@ -1,6 +1,11 @@
 import express from "express"
 import path from "path"
 import { fileURLToPath } from "url"
+import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
+import cors from "cors";
+
+
 import userRoutes from "./Routes/userRoutes.js"
 import dashboardRoute from "./Routes/dashboard/dashboardRoute.js"
 import authRoute from "./Routes/authRoute/authRoute.js"
@@ -21,21 +26,13 @@ import marksheetReport from "./Routes/reports/marksheet/marksheetPdfRoute.js"
 import marklistReport from "./Routes/reports/marklist/marklistRoute.js"
 import markanalysisReport from "./Routes/reports/analysis/markanalysisRoute.js"
 
-
-import dotenv from 'dotenv'
-import cookieParser from 'cookie-parser'
-import cors from 'cors'
-
-
 import uploadRoute from "./Routes/upload/uploadRoute.js"
 import timetableRoute from "./Routes/timetable/timetableController.js"
-
 
 import SMSResRoute from "./Routes/sms/resultSMSRoute.js"
 
 
-
-
+// Configure __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -64,11 +61,13 @@ app.use(express.urlencoded({
 
 
 // Serve static files from the React app build folder
-app.use(express.static(path.join(__dirname, "dist")));
+// app.use(express.static(path.join(__dirname, "dist")));
 
 // Static files
 app.use('/images', express.static(path.join(__dirname, 'public', 'images')))
 
+// Handle favicon requests explicitly
+app.get("/favicon.ico", (req, res) => res.status(204).end());
 
 // Routes
 app.use("/api/dashboard", dashboardRoute);
@@ -86,27 +85,24 @@ app.use("/api/report", marksheetReport); // Not complete FOR MARKSHEET
 app.use("/api/report", marklistReport); // Not complete FOR MARKSHEET
 app.use("/api/report", markanalysisReport); // Not complete FOR ANALYSIS
 
-
 app.use("/api/teacher/", teacherRoute)
 app.use("/api/stream/", streamRoute)
 app.use("/api/remark/", remarkRoute);
 app.use("/api/particular/", particularRoute); // Not complete
 
-
 app.use("/api/upload/", uploadRoute); // Not complete
 app.use("/api/timetable/", timetableRoute); // Not complete
-
 
 app.use("/api/sms/", SMSResRoute);
 
 // Handle client-side routing
-app.get('*', (req, res, next) => {
-    if(req.path.startsWith('/api')){
-        return next()
-    }else{
-        res.sendFile(path.join(__dirname, "dist", "index.html"));
-    }
-})
+// app.get('*', (req, res, next) => {
+//     if(req.path.startsWith('/api')){
+//         return next()
+//     }else{
+//         res.sendFile(path.join(__dirname, "dist", "index.html"));
+//     }
+// })
 
 // Handle 404 for API route only
 app.use('/api/*', (req, res) => {
