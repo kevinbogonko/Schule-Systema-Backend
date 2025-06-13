@@ -1,6 +1,14 @@
 import express from 'express'
 import { verifyToken } from '../../utils/verifyToken.js'
-import { registerUser, userLogin, refreshAccessToken, userLogout, getLoggedInUser } from '../../controllers/auth/authController.js'
+import {
+  registerUser,
+  userLogin,
+  refreshAccessToken,
+  userLogout,
+  getLoggedInUser,
+  requestPassResetOTP,
+  verifyPassResetOTP
+} from "../../controllers/auth/authController.js";
 
 const router = express.Router()
 
@@ -31,6 +39,12 @@ router.get("/csrf-token", (req, res) => {
 
 // Logout Endpoint
 router.post("/logout", verifyToken, userLogout)
+
+// Request Pass reset OTP
+router.post("/requestpassresetotp", requestPassResetOTP);
+
+// Verify Pass reset OTP
+router.post("/verifypassresetotp", verifyPassResetOTP);
 
 router.get("/test", verifyToken, (req, res, next) => { // This was for testing, will be removed
 

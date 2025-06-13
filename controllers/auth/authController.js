@@ -5,6 +5,7 @@ import {v4 as uuidv4} from "uuid"
 import {validationResult} from "express-validator"
 import { createError } from '../../utils/ErrorHandler.js'
 import loginLimiter from '../../utils/rateLimiter.js'
+import {sendBulkSMS} from "../sms/standardSMSController.js"
 
 // Register User Controller
 export const registerUser = async (req, res, next) => {
@@ -428,4 +429,179 @@ export const userLogout = async (req, res, next) => {
         await pool.query('ROLLBACK');
         next(createError(500, 'Logout failed'));
     }
+};
+
+// Request Password Reset OTP
+export const requestPassResetOTP = async (req, res, next) => {
+  try {
+    // Validate request body
+    const { username } = req.body;
+    if (!username) {
+      return next(createError(400, "Username is required"));
+    }
+
+    // Get user details including role
+    const userQuery = await pool.query(
+      `SELECT u.user_id, u.role 
+       FROM users u 
+       WHERE u.username = $1`,
+      [username]
+    );
+
+    if (userQuery.rowCount === 0) {
+      return next(createError(404, "User not found"));
+    }
+
+    const { user_id, role } = userQuery.rows[0];
+    let phone;
+
+    // Determine phone number based on user role
+    switch (role) {
+      case "student":
+        const studentQuery = await pool.query(
+          "SELECT phone FROM students WHERE id = $1",
+          [user_id]
+        );
+        if (studentQuery.rowCount > 0) {
+          phone = studentQuery.rows[0].phone;
+        }
+        break;
+
+      case "teacher":
+      case "staff":
+        const staffQuery = await pool.query(
+          "SELECT phone FROM staff WHERE id = $1",
+          [user_id]
+        );
+        if (staffQuery.rowCount > 0) {
+          phone = staffQuery.rows[0].phone;
+        }
+        break;
+
+      case "admin":
+      case "particular":
+        const particularQuery = await pool.query(
+          "SELECT phone FROM particulars WHERE id = $1",
+          [user_id]
+        );
+        if (particularQuery.rowCount > 0) {
+          phone = particularQuery.rows[0].phone;
+        }
+        break;
+
+      default:
+        return next(createError(400, "Invalid user role"));
+    }
+
+    if (!phone) {
+      return next(createError(404, "Phone number not found for user"));
+    }
+
+    // Generate OTP and expiry time
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
+    const expiry = new Date(Date.now() + 1000 * 60 * 5); // 5 minutes
+
+    // Update user record with OTP
+    await pool.query(
+      `UPDATE users 
+       SET reset_otp = $1, reset_otp_expiry = $2 
+       WHERE username = $3`,
+      [otp, expiry, username]
+    );
+
+    const smslist = [{
+      partnerID: process.env.TEXTSMS_PARTNER_ID,
+      apikey: process.env.TEXTSMS_API_KEY,
+      pass_type: "plain",
+      clientsmsid:
+        user_id.toString() ||
+        `sms-${Math.random().toString(36).slice(2, 10)}`, 
+      mobile: phone,
+      message: `Your password reset OTP is : ${otp}. It expires in 5 minutes.`,
+      shortcode: process.env.TEXTSMS_SHORTCODE || "TextSMS",
+    }];
+
+    const payload = {
+      count: 1,
+      smslist,
+      unival: "passresetsms",
+    };
+
+    req.body = payload;
+    await sendBulkSMS(req, res, next);
+    // Log successful OTP sending (without exposing sensitive data)
+    // console.log(`OTP sent to user ${username}`);
+
+    // res.status(200).json(`OTP sent successfully to registered phone number ${phone}`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Verify Password Reset OTP
+export const verifyPassResetOTP = async (req, res, next) => {
+  try {
+    // 1. Input validation
+    const { username, otp, newPassword } = req.body;
+
+    if (!username || !otp || !newPassword) {
+      return next(
+        createError(400, "Username, OTP and new password are required")
+      );
+    }
+
+    if (newPassword.length < 8) {
+      return next(
+        createError(400, "Password must be at least 8 characters long")
+      );
+    }
+
+    // 2. Check OTP validity
+    const { rows } = await pool.query(
+      `SELECT user_id, reset_otp_expiry 
+       FROM users 
+       WHERE username = $1 
+       AND reset_otp = $2 
+       AND reset_otp_expiry > NOW()`,
+      [username, otp]
+    );
+
+    if (rows.length === 0) {
+      return next(createError(400, "Invalid or expired OTP"));
+    }
+
+    // 3. Hash the new password
+    const saltRounds = 10;
+    const hash = await bcrypt.hash(newPassword, saltRounds);
+
+    // 4. Update password and clear OTP fields
+    const { rowCount } = await pool.query(
+      `UPDATE users 
+       SET password = $1, 
+           reset_otp = NULL, 
+           reset_otp_expiry = NULL,
+           updated_at = NOW()
+       WHERE username = $2
+       RETURNING user_id`,
+      [hash, username]
+    );
+
+    if (rowCount === 0) {
+      return next(createError(500, "Failed to update password"));
+    }
+
+    // 5. Success response
+    res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+      data: {
+        userId: rows[0].user_id,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    // 6. Error handling
+    console.error("Error in verifyResetOTP:", error);
+    next(createError(500, "Internal server error"));
+  }
 };
