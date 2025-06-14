@@ -159,6 +159,7 @@ export const userLogin = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      path: "/",
       maxAge: 15 * 60 * 1000, // ✅ 15 minutes
     });
 
@@ -414,7 +415,7 @@ export const userLogout = async (req, res, next) => {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-          path: "/auth/refresh",
+          path: "/",
           expires: new Date(0),
         });
 
