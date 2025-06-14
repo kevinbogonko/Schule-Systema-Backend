@@ -399,7 +399,7 @@ export const userLogout = async (req, res, next) => {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-          path: "/auth/refresh", // MUST match path used when setting the cookie
+          path: "/", // MUST match path used when setting the cookie
         });
 
         // Clear XSRF-TOKEN 
