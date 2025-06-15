@@ -354,82 +354,103 @@ const revokeTokenFamily = async (tokenId) => {
     );
 };
 
-// Logout Controller
+// lOGOUT 
 export const userLogout = async (req, res, next) => {
-    const refreshToken = req.cookies.refresh_token;
-    const accessToken = req.cookies.access_token;
+  const refreshToken = req.cookies.refresh_token;
+  const accessToken = req.cookies.access_token;
 
-    try {
-        await pool.query('BEGIN');
+  try {
+    await pool.query("BEGIN");
 
-        // 1. Revoke refresh token (and its replacements)
-        if (refreshToken) {
-            try {
-                const decodedRefresh = jwt.verify(refreshToken, process.env.JWT_REFRESH_TOKEN_SECRET_KEY);
-                await revokeTokenFamily(decodedRefresh.jti);
-            } catch (err) {
-                console.warn('Invalid refresh token during logout:', err.message);
-            }
-        }
-
-        // 2. Blacklist access token
-        if (accessToken) {
-            try {
-                const decodedAccess = jwt.verify(accessToken, process.env.JWT_ACCESS_TOKEN_SECRET_KEY, { ignoreExpiration: true });
-                await pool.query(
-                    'INSERT INTO revoked_tokens (token_id, user_id, expires_at) VALUES ($1, $2, $3)',
-                    [decodedAccess.jti, decodedAccess.user.id, new Date(decodedAccess.exp * 1000)]
-                );
-            } catch (err) {
-                console.warn('Invalid access token during logout:', err.message);
-            }
-        }
-
-        await pool.query('COMMIT');
-
-        // 3. Clear the refresh and access token cookie
-        res.clearCookie("access_token", {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-          path: "/", // MUST match path used when setting the cookie
-        });
-
-        res.clearCookie("refresh_token", {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-          path: "/", // MUST match path used when setting the cookie
-        });
-
-        // Clear XSRF-TOKEN 
-        res.clearCookie("XSRF-TOKEN", {
-          httpOnly: false,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-          path: "/", // MUST match path used when setting the cookie
-        });
-
-        // Optional: force-expire cookie just in case
-        res.cookie("refresh_token", "", {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-          path: "/",
-          expires: new Date(0),
-        });
-
-        // 4. Tell frontend to clear local tokens
-        res.json({
-            success: true,
-            message: 'Logged out successfully.',
-            clearClientTokens: true,
-        });
-
-    } catch (err) {
-        await pool.query('ROLLBACK');
-        next(createError(500, 'Logout failed'));
+    // 1. Revoke refresh token (and its replacements)
+    if (refreshToken) {
+      try {
+        const decodedRefresh = jwt.verify(
+          refreshToken,
+          process.env.JWT_REFRESH_TOKEN_SECRET_KEY
+        );
+        await revokeTokenFamily(decodedRefresh.jti);
+      } catch (err) {
+        console.warn("Invalid refresh token during logout:", err.message);
+      }
     }
+
+    // 2. Blacklist access token
+    if (accessToken) {
+      try {
+        const decodedAccess = jwt.verify(
+          accessToken,
+          process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
+          { ignoreExpiration: true }
+        );
+        await pool.query(
+          "INSERT INTO revoked_tokens (token_id, user_id, expires_at) VALUES ($1, $2, $3)",
+          [
+            decodedAccess.jti,
+            decodedAccess.user.id,
+            new Date(decodedAccess.exp * 1000),
+          ]
+        );
+      } catch (err) {
+        console.warn("Invalid access token during logout:", err.message);
+      }
+    }
+
+    await pool.query("COMMIT");
+
+    // 3. Prepare cookie options
+    const baseCookieOptions = {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+      path: "/",
+    };
+
+    const httpOnlyCookieOptions = {
+      ...baseCookieOptions,
+      httpOnly: true,
+      expires: new Date(0),
+    };
+
+    const xsrfCookieOptions = {
+      ...baseCookieOptions,
+      httpOnly: false,
+      expires: new Date(0),
+    };
+
+    // 4. Set headers before sending response
+    res.status(200).set({
+      "Cache-Control": "no-store, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+
+    // 5. Clear cookies and send response
+    res
+      .cookie("access_token", "", httpOnlyCookieOptions)
+      .cookie("refresh_token", "", httpOnlyCookieOptions)
+      .cookie("XSRF-TOKEN", "", xsrfCookieOptions)
+      .json({
+        success: true,
+        message: "Logged out successfully.",
+        clearClientTokens: true,
+        redirectTo: "/login",
+      });
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    console.error("Logout error:", err);
+
+    // Attempt to clear cookies even if database operations fail
+    const simpleCookieOptions = { expires: new Date(0), path: "/" };
+    res
+      .status(500)
+      .cookie("access_token", "", simpleCookieOptions)
+      .cookie("refresh_token", "", simpleCookieOptions)
+      .cookie("XSRF-TOKEN", "", simpleCookieOptions)
+      .json({
+        success: false,
+        message: "Logout failed",
+      });
+  }
 };
 
 // Request Password Reset OTP
