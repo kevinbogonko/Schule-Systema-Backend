@@ -620,7 +620,7 @@ export const generateStudentReportPdf = async (response) => {
           doc
             .font("Times-Bold")
             .fontSize(11)
-            .text("Grade Comparison", graphX, verticalLineYStart + 5);
+            .text("KCPE Vs Agr. Grade Comparison", graphX, verticalLineYStart + 5);
 
           const kcpeValue = gradeToValue(student.kcpe_grade);
           const agValue = gradeToValue(student.ag_grade);

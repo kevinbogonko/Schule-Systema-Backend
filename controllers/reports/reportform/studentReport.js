@@ -111,13 +111,19 @@ export const studentReportMarks = async (req, res, next) => {
       })
     );
 
-    // Fetch active subjects
+    // Fetch active subjects (status = 1)
     const subjectTable = `subjects_form_${sanitizedForm}`;
     const subjectsRes = await pool.query(
-      `SELECT id, name, init FROM ${subjectTable} WHERE status = 1`
+      `SELECT id, name, init, isselective FROM ${subjectTable} WHERE status = 1`
     );
     const subjects = subjectsRes.rows;
     const subjectMap = new Map(subjects.map((sub) => [sub.id, sub]));
+
+    // Separate selective and non-selective subjects
+    const selectiveSubjects = subjects.filter((sub) => sub.isselective === 1);
+    const nonSelectiveSubjects = subjects.filter(
+      (sub) => sub.isselective !== 1
+    );
 
     // Categorize active subjects into groups
     const active_group_1 = group_1.filter((id) =>
@@ -210,7 +216,7 @@ export const studentReportMarks = async (req, res, next) => {
       });
     });
 
-    // Function to determine grade and points - FIXED THIS FUNCTION
+    // Function to determine grade and points
     const getGradeAndPoints = (mark, subjectId) => {
       if (mark === null || mark === undefined || isNaN(mark)) {
         return { grade: "N/A", points: 0 };
@@ -221,7 +227,6 @@ export const studentReportMarks = async (req, res, next) => {
         return { grade: "N/A", points: 0 };
       }
 
-      // Convert mark to number if it's a string
       const numericMark = typeof mark === "string" ? parseFloat(mark) : mark;
 
       for (const [grade, range] of Object.entries(gradeRanges)) {
@@ -230,7 +235,6 @@ export const studentReportMarks = async (req, res, next) => {
         }
       }
 
-      // Handle cases where mark is below minimum or above maximum
       if (numericMark < gradeRanges["E"].min) {
         return { grade: "E", points: pointsScale["E"] };
       }
@@ -244,7 +248,7 @@ export const studentReportMarks = async (req, res, next) => {
     // Collect active marks from all exam tables
     const studentMap = new Map();
 
-    // Modified: Get all students with current_form and current_year conditions
+    // Get all students with current_form and current_year conditions
     const studentsRes = await pool.query(
       `
       SELECT id, fname || ' ' || lname AS name, kcpe_marks, stream_id, phone
@@ -282,7 +286,7 @@ export const studentReportMarks = async (req, res, next) => {
       return "D";
     }
 
-    // Process each exam table
+    // Process each exam table for non-selective subjects
     for (const [key, tableName] of Object.entries(examTables)) {
       const examRes = await pool.query(
         `
@@ -297,7 +301,8 @@ export const studentReportMarks = async (req, res, next) => {
         if (!studentMap.has(row.id)) continue;
         const student = studentMap.get(row.id);
 
-        subjects.forEach((subject) => {
+        // Process non-selective subjects
+        nonSelectiveSubjects.forEach((subject) => {
           const code = subject.id.toString();
           const value = parseFloat(row[code]) || 0;
 
@@ -314,6 +319,70 @@ export const studentReportMarks = async (req, res, next) => {
 
           subjectEntry.marks[examAliases[key]] = value;
         });
+      }
+    }
+
+    // Process selective subjects for each student
+    if (selectiveSubjects.length > 0) {
+      const selectiveSubjectCodes = selectiveSubjects.map((sub) =>
+        sub.id.toString()
+      );
+
+      // Query selectives table for all students at once
+      const selectivesRes = await pool.query(
+        `SELECT student_id, ${selectiveSubjectCodes
+          .map((code) => `"${code}"`) // <-- wrap each column in double quotes
+          .join(", ")} FROM selectives WHERE student_id = ANY($1)`,
+        [Array.from(studentMap.keys())]
+      );
+
+      // Create map of student_id to their selected subjects
+      const studentSelectivesMap = new Map();
+      selectivesRes.rows.forEach((row) => {
+        const selectedSubjects = [];
+        for (const [code, value] of Object.entries(row)) {
+          if (code !== "student_id" && value === 1) {
+            selectedSubjects.push(code);
+          }
+        }
+        studentSelectivesMap.set(row.student_id, selectedSubjects);
+      });
+
+      // Process each student's selective subjects
+      for (const [studentId, student] of studentMap.entries()) {
+        const selectedSubjects = studentSelectivesMap.get(studentId) || [];
+
+        // For each selected subject, get marks from all exam tables
+        for (const subjectCode of selectedSubjects) {
+          const subject = subjectMap.get(parseInt(subjectCode));
+          if (!subject) continue;
+
+          for (const [key, tableName] of Object.entries(examTables)) {
+            const examRes = await pool.query(
+              `SELECT ${subjectCode} FROM ${tableName} WHERE id = $1`,
+              [studentId]
+            );
+
+            if (examRes.rows.length > 0) {
+              const value = parseFloat(examRes.rows[0][subjectCode]) || 0;
+
+              let subjectEntry = student.results.find(
+                (r) => r.code === subjectCode
+              );
+              if (!subjectEntry) {
+                subjectEntry = {
+                  code: subjectCode,
+                  subject: subject.name,
+                  marks: {},
+                  group: getSubjectGroup(parseInt(subjectCode)),
+                };
+                student.results.push(subjectEntry);
+              }
+
+              subjectEntry.marks[examAliases[key]] = value;
+            }
+          }
+        }
       }
     }
 
@@ -402,12 +471,31 @@ export const studentReportMarks = async (req, res, next) => {
 
       // Calculate totals based on form level
       if (form == 1 || form == 2) {
+        // For form 1 and 2, include all subjects except group 4
         student.results.forEach((subject) => {
-          student.totalMarks += subject.marks.mark || 0;
-          student.totalPoints += subject.points || 0;
-          student.includedSubjects.push(subject.code);
+          if (subject.group !== 4) {
+            // Only include non-group 4 subjects
+            student.totalMarks += subject.marks.mark || 0;
+            student.totalPoints += subject.points || 0;
+            student.includedSubjects.push(subject.code);
+          }
         });
+
+        // Then select one group 4 subject with max value
+        if (active_group_4.length > 0) {
+          const group4Subject = student.results
+            .filter((r) => r.group === 4)
+            .sort((a, b) => (b.marks.mark || 0) - (a.marks.mark || 0))
+            .shift();
+
+          if (group4Subject) {
+            student.totalMarks += group4Subject.marks.mark || 0;
+            student.totalPoints += group4Subject.points || 0;
+            student.includedSubjects.push(group4Subject.code);
+          }
+        }
       } else {
+        // For form 3 and 4, maintain the original set logic
         active_group_1.forEach((subjectId) => {
           const subject = student.results.find(
             (r) => r.code === subjectId.toString()
@@ -483,16 +571,16 @@ export const studentReportMarks = async (req, res, next) => {
       streamGroups[student.stream_id].push(student);
     });
 
-    // Modified: Use streams table with INNER JOIN to stream_names
+    // Use streams table with INNER JOIN to stream_names
     const streamsRes = await pool.query(
-      `SELECT s.id, sn.stream_name 
+      `SELECT s.stream_id, sn.stream_name 
        FROM streams s
        INNER JOIN stream_names sn ON s.stream_id = sn.id
        WHERE s.form = $1`,
       [form]
     );
     const streamNameMap = new Map(
-      streamsRes.rows.map((row) => [row.id, row.stream_name])
+      streamsRes.rows.map((row) => [row.stream_id, row.stream_name])
     );
 
     // Calculate subject ranks within each stream
@@ -771,7 +859,10 @@ export const studentReportMarks = async (req, res, next) => {
       if (averagePoints >= 6) return "C+";
       if (averagePoints >= 5) return "C";
       if (averagePoints >= 4) return "C-";
-      return "D";
+      if (averagePoints >= 3) return "D+";
+      if (averagePoints >= 2) return "D";
+      if (averagePoints >= 1) return "D-";
+      return "E";
     }
 
     // Prepare final response
@@ -806,11 +897,10 @@ export const studentReportMarks = async (req, res, next) => {
           student.id
         );
 
-        const streamName = streamNameMap.get(student.stream_id) || " - ";
+        const streamName = streamNameMap.get(student.stream_id);
 
         // Get class teacher name
         let classTeacherName = "N/A";
-        // Modified: Use streams table with INNER JOIN to get teacher_id
         const streamTeacherRes = await pool.query(
           `
           SELECT s.teacher_id 
@@ -858,7 +948,7 @@ export const studentReportMarks = async (req, res, next) => {
         }
 
         // Get student image path
-        let imagePath = '/images/defaults/user_p.webp'; // Default value
+        let imagePath = "/images/defaults/user_p.webp"; // Default value
         try {
           const imageRes = await pool.query(
             "SELECT path FROM student_images WHERE id = $1",
@@ -932,20 +1022,19 @@ export const studentReportMarks = async (req, res, next) => {
         { motto: particulars.motto },
         { address: particulars.address },
         { phone: particulars.phone },
-        { logo: particulars.logo_path || "/school_logo.png"}
+        { logo: particulars.logo_path || "/school_logo.png" },
       ],
       examDetails: {
         form: form,
         term: term,
-        examname: "END TERM AVERAGE",
+        examname: "MID TERM",
         year: year,
       },
       studentResults: studentResults,
-      studentIds : studentIds
+      studentIds: studentIds,
     };
 
-    // res.status(200).json(response);
-    return response
+    return response;
   } catch (err) {
     next(err);
   }

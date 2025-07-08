@@ -26,6 +26,7 @@ router.post("/marksheetpdf", async (req, res, next) => {
     });
     res.send(pdfBuffer);
   } catch (err) {
+    console.log(err)
     next(err);
   }
 });

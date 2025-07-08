@@ -1,3 +1,4 @@
+import xlsx from "xlsx";
 import pool from "../config/db_connection.js";
 import { createError } from "../utils/ErrorHandler.js";
 import { sanitizeStringVariables } from "../utils/sanitizeString.js";
@@ -27,7 +28,6 @@ export const addStudent = async (req, res, next) => {
       !id ||
       !fname ||
       !mname ||
-      !lname ||
       !sex ||
       !dob ||
       !stream_id ||
@@ -37,7 +37,7 @@ export const addStudent = async (req, res, next) => {
     )
       return next(createError(400, "Missing required parameters!"));
 
-    // More strict sanitization
+    // Sanitization
     const sanitizedFName = sanitizeStringVariables(fname);
     const sanitizedMName = sanitizeStringVariables(mname);
     const sanitizedLName = sanitizeStringVariables(lname);
@@ -45,13 +45,14 @@ export const addStudent = async (req, res, next) => {
     const sanitizedDOB = sanitizeStringVariables(dob);
     const sanitizedForm = sanitizeStringVariables(form);
     const sanitizedYear = sanitizeStringVariables(year);
+    const sanitizedAddress = sanitizeStringVariables(address);
 
-    // Validate inputs against stricter regex pattern
+    // Validate inputs against regex pattern
     const validPattern = /^[a-z0-9_]+$/i;
     if (
       !validPattern.test(sanitizedFName) ||
       !validPattern.test(sanitizedMName) ||
-      !validPattern.test(sanitizedLName) ||
+      (sanitizedLName && !validPattern.test(sanitizedLName)) ||
       !validPattern.test(sanitizedSex) ||
       !validPattern.test(sanitizedDOB) ||
       !validPattern.test(stream_id) ||
@@ -59,8 +60,7 @@ export const addStudent = async (req, res, next) => {
       !validPattern.test(sanitizedForm) ||
       !validPattern.test(sanitizedYear) ||
       !validPattern.test(phone) ||
-      !validPattern.test(address)
-    )
+      (sanitizedAddress && !validPattern.test(sanitizedAddress)))
       return next(createError(400, "Invalid inputs!"));
 
     const validIdPattern = /^[0-9_]+$/;
@@ -92,7 +92,7 @@ export const addStudent = async (req, res, next) => {
         sanitizedForm,
         sanitizedYear,
         phone,
-        address,
+        sanitizedAddress,
       ]
     );
 
@@ -115,6 +115,203 @@ export const addStudent = async (req, res, next) => {
     }
 
     next(err);
+  } finally {
+    client.release();
+  }
+};
+
+// Import and add students from excel sheet
+export const addStudentsFromExcel = async (req, res, next) => {
+  const client = await pool.connect();
+
+  // ✅ Excel serial date to YYYY-MM-DD
+  const excelDateToJSDate = (serial) => {
+    const utc_days = Math.floor(serial - 25569);
+    const utc_value = utc_days * 86400;
+    const date_info = new Date(utc_value * 1000);
+    return date_info.toISOString().split("T")[0]; // "YYYY-MM-DD"
+  };
+
+  try {
+    if (!req.file) {
+      return next(createError(400, "No file uploaded!"));
+    }
+
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      return next(createError(400, "Uploaded file is empty"));
+    }
+
+    const workbook = xlsx.read(req.file.buffer);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = xlsx.utils.sheet_to_json(worksheet);
+
+    if (!data || data.length === 0) {
+      return next(createError(400, "No data found in Excel file"));
+    }
+
+    await client.query("BEGIN");
+    const insertedStudents = [];
+    const errorRows = [];
+
+    for (const [index, row] of data.entries()) {
+      try {
+        let {
+          id,
+          fname,
+          mname = null,
+          lname = null,
+          sex,
+          dob = "2007-01-01",
+          stream_id,
+          kcpe_marks = 0,
+          form,
+          year,
+          phone,
+          address = null,
+        } = row;
+
+        // ✅ Convert Excel date serial to string if needed
+        if (typeof dob === "number") {
+          dob = excelDateToJSDate(dob);
+        }
+
+        if (!id)
+          throw new Error(`Missing required id parameters in row ${index + 1}`);
+        if (!fname)
+          throw new Error(
+            `Missing required fname parameters in row ${index + 1}`
+          );
+        if (!lname)
+          throw new Error(
+            `Missing required lname parameters in row ${index + 1}`
+          );
+        if (!sex)
+          throw new Error(
+            `Missing required sex parameters in row ${index + 1}`
+          );
+        if (!dob)
+          throw new Error(
+            `Missing required dob parameters in row ${index + 1}`
+          );
+        if (!stream_id)
+          throw new Error(
+            `Missing required stream_id parameters in row ${index + 1}`
+          );
+        if (!kcpe_marks)
+          throw new Error(
+            `Missing required kcpe_marks parameters in row ${index + 1}`
+          );
+        if (!form)
+          throw new Error(
+            `Missing required form parameters in row ${index + 1}`
+          );
+        if (!year)
+          throw new Error(
+            `Missing required year parameters in row ${index + 1}`
+          );
+        if (!phone)
+          throw new Error(
+            `Missing required phone parameters in row ${index + 1}`
+          );
+
+        const sanitizedFName = sanitizeStringVariables(fname);
+        const sanitizedMName = sanitizeStringVariables(mname);
+        const sanitizedLName = sanitizeStringVariables(lname);
+        const sanitizedSex = sanitizeStringVariables(sex);
+        const sanitizedDOB = sanitizeStringVariables(dob);
+        const sanitizedForm = sanitizeStringVariables(form);
+        const sanitizedYear = sanitizeStringVariables(year);
+        const sanitizedAddress = sanitizeStringVariables(address);
+
+        const validPattern = /^[a-z0-9_]+$/i;
+        if (
+          !validPattern.test(sanitizedFName) ||
+          !validPattern.test(sanitizedMName) ||
+          (sanitizedLName && !validPattern.test(sanitizedLName)) ||
+          !validPattern.test(sanitizedSex) ||
+          !validPattern.test(sanitizedDOB) ||
+          !validPattern.test(stream_id) ||
+          !validPattern.test(kcpe_marks) ||
+          !validPattern.test(sanitizedForm) ||
+          !validPattern.test(sanitizedYear) ||
+          !validPattern.test(phone) ||
+          (sanitizedAddress && !validPattern.test(sanitizedAddress))
+        ) {
+          throw new Error(`Invalid inputs in row ${index + 1}`);
+        }
+
+        const validIdPattern = /^[0-9_]+$/;
+        if (!validIdPattern.test(id)) {
+          throw new Error(`Invalid Student Reg No in row ${index + 1}`);
+        }
+
+        if (!["1", "2", "3", "4"].includes(sanitizedForm)) {
+          throw new Error(`Invalid form (must be 1-4) in row ${index + 1}`);
+        }
+
+        const studentResult = await client.query(
+          `INSERT INTO students 
+           (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, year_of_enrolment, current_form, current_year, phone, address)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+           RETURNING *`,
+          [
+            id,
+            sanitizedFName,
+            sanitizedMName,
+            sanitizedLName,
+            sanitizedSex,
+            sanitizedDOB,
+            stream_id,
+            kcpe_marks,
+            sanitizedYear,
+            sanitizedForm,
+            sanitizedYear,
+            phone,
+            sanitizedAddress,
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO selectives 
+           (student_id, form, stream_id, year) 
+           VALUES ($1, $2, $3, $4)`,
+          [id, sanitizedForm, stream_id, sanitizedYear]
+        );
+
+        insertedStudents.push(studentResult.rows[0]);
+      } catch (err) {
+        errorRows.push({
+          row: index + 1,
+          error: err.message,
+          data: row,
+        });
+      }
+    }
+
+    await client.query("COMMIT");
+
+    if (errorRows.length > 0) {
+      console.error("Errors in these rows:", errorRows);
+      return res.status(207).json({
+        message: `${insertedStudents.length} students added successfully, ${errorRows.length} failed`,
+        insertedStudents,
+        errorRows,
+      });
+    }
+
+    res.status(201).json({
+      message: `${insertedStudents.length} students added successfully`,
+      students: insertedStudents,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Excel processing error:", err);
+
+    if (err.code === "23505") {
+      return next(createError(400, "One or more students already exist"));
+    }
+
+    next(createError(500, "Error processing Excel file"));
   } finally {
     client.release();
   }
@@ -331,7 +528,7 @@ export const getAllFormsStudents = async (req, res, next) => {
         });
       }
     } catch (err) {
-      console.log(err)
+      console.log(err);
       await client.query("ROLLBACK");
       throw err;
     } finally {

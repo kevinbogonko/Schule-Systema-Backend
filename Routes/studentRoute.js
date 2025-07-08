@@ -8,17 +8,22 @@ import {
   getAllStudentsPerStream,
   getStudentInfo,
   // getAllFormsStudents,
+  addStudentsFromExcel
 } from "../controllers/studentCRUDController.js";
 import {getStudentPhoto} from "../controllers/students/studentPhotosController.js"
 import {
   PromoteStudents,
   PromoteGradedStudents,
 } from "../controllers/students/promotionController.js";
+import { uploadExcel } from '../config/excelUploadMiddleware.js';
 
 const router = express.Router()
 
 // Endpoint to add Student
 router.post("/addstudent", addStudent)
+
+// Endpoint to add Students from Excel
+router.post("/excelstudents", uploadExcel, addStudentsFromExcel);
 
 // Endpoint to fetch all students
 router.post("/getstudents", getAllStudents)

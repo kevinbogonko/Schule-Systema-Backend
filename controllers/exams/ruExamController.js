@@ -1281,9 +1281,14 @@ export const procesMarkSheet = async (req, res, next) => {
   const { exam, form, stream } = req.body;
 
   try {
-    if (!exam || !form || !stream) {
-      return next(createError(400, "Invalid exam or form provided"));
-    }
+
+    if(!exam) return next(createError(400, "Invalid exam provided"));
+    if(!form) return next(createError(400, "Invalid form provided"));
+    if(!stream) return next(createError(400, "Invalid stream provided"));
+
+    // if (!exam || !form || !stream) {
+    //   return next(createError(400, "Invalid exam or form provided"));
+    // }
 
     // Sanitize inputs
     const sanitizedExam = sanitizeStringVariables(exam);
@@ -1368,6 +1373,7 @@ export const procesMarkSheet = async (req, res, next) => {
       subjectHeaders: Object.values(subjectInitialsMap),
     };
 
+    // console.log(response)
     return response;
   } catch (error) {
     next(error);
@@ -1472,10 +1478,9 @@ export const StudentMarkAnalysis = async (req, res, next) => {
 
     // Get active subjects from database
     const activeSubjects = await pool.query(
-      `SELECT id, name, init FROM subjects_form_1 WHERE status = 1`
+      `SELECT id, name, init FROM subjects_form_2 WHERE status = 1`
     );
 
-    // console.log(activeSubjects)
     // Create a map of subject initials to full names
     const subjectMap = {};
     activeSubjects.rows.forEach((subject) => {
@@ -1554,6 +1559,7 @@ export const StudentMarkAnalysis = async (req, res, next) => {
           avgPoints: 0,
         };
 
+        console.log(streamData)
         // Count grades for this subject in this stream
         let totalPoints = 0;
         streamStudents.forEach((student) => {

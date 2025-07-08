@@ -8,8 +8,6 @@ router.post("/markanalysis", async (req, res, next) => {
   try {
     // 1. Generate report data
     const marklistData = await StudentMarkAnalysis(req);
-    // console.log(marklistData);
-    // res.json(marklistData);
 
     // 2. Wrap PDF generation in a Promise to await the buffer
     const pdfBuffer = await new Promise((resolve, reject) => {

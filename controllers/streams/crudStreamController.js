@@ -498,7 +498,7 @@ export const getAllStreamNames = async (req, res, next) => {
   }
 };
 
-// Get A Single Streams
+// Get A Single Stream name
 export const getStreamName = async (req, res, next) => {
 
   try {
@@ -542,6 +542,7 @@ export const getStreamName = async (req, res, next) => {
   }
 };
 
+// Update a single stream name
 export const updateGlobalStream = async (req, res, next) => {
   try {
     validateContentType(req, res, (err) => {
