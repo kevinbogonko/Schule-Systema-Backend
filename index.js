@@ -5,31 +5,36 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
+import dashboardRoute from "./Routes/analytics/dashboard/dashboardRoute.js";
+import authRoute from "./Routes/analytics/authRoute/authRoute.js";
+import subjectRoute from "./Routes/analytics/subjects/subjectsRoute.js";
+import smsRoute from "./Routes/analytics/smsRoute.js";
+import examRoute from "./Routes/analytics/exams/examRoute.js";
+import gradingRoute from "./Routes/analytics/exams/gradingRoute.js";
+import studentRoute from "./Routes/analytics/studentRoute.js";
+import studentReportRoute from "./Routes/analytics/studentReportRoute.js";
 
-import userRoutes from "./Routes/userRoutes.js"
-import dashboardRoute from "./Routes/dashboard/dashboardRoute.js"
-import authRoute from "./Routes/authRoute/authRoute.js"
-import subjectRoute from "./Routes/subjects/subjectsRoute.js"
-import smsRoute from "./Routes/smsRoute.js"
-import examRoute from "./Routes/exams/examRoute.js"
-import gradingRoute from "./Routes/exams/gradingRoute.js"
-import studentRoute from "./Routes/studentRoute.js"
-import studentReportRoute from "./Routes/studentReportRoute.js"
+import teacherRoute from "./Routes/analytics/teachers/teacherRoute.js";
+import streamRoute from "./Routes/analytics/streams/streamRoute.js";
+import remarkRoute from "./Routes/analytics/remarks/remarkRoute.js";
+import particularRoute from "./Routes/analytics/particulars/particularRoute.js";
 
-import teacherRoute from "./Routes/teachers/teacherRoute.js"
-import streamRoute from "./Routes/streams/streamRoute.js"
-import remarkRoute from "./Routes/remarks/remarkRoute.js"
-import particularRoute from "./Routes/particulars/particularRoute.js"
+import report from "./Routes/analytics/reports/reportform/testPdf.js";
+import marksheetReport from "./Routes/analytics/reports/marksheet/marksheetPdfRoute.js";
+import marklistReport from "./Routes/analytics/reports/marklist/marklistRoute.js";
+import markanalysisReport from "./Routes/analytics/reports/analysis/markanalysisRoute.js";
 
-import report from "./Routes/reports/reportform/testPdf.js"
-import marksheetReport from "./Routes/reports/marksheet/marksheetPdfRoute.js"
-import marklistReport from "./Routes/reports/marklist/marklistRoute.js"
-import markanalysisReport from "./Routes/reports/analysis/markanalysisRoute.js"
+import uploadRoute from "./Routes/analytics/upload/uploadRoute.js";
+// SMS
+import SMSResRoute from "./Routes/analytics/sms/resultSMSRoute.js";
 
-import uploadRoute from "./Routes/upload/uploadRoute.js"
+
+// TIMETABLE
 import timetableRoute from "./Routes/timetable/timetableController.js"
 
-import SMSResRoute from "./Routes/sms/resultSMSRoute.js"
+// AI
+import vectorRoute from "./Routes/ai/vectors/vectorRoute.js"
+import ingestionRoute from "./Routes/ai/ingestion/ingestionRoute.js";
 
 
 // Configure __dirname for ES modules
@@ -48,7 +53,7 @@ const PORT = process.env.PORT || 5004
 // Middlewares
 app.use(
   cors({
-    origin: process.env.FRONTEND_BASE_URL,
+    origin: "http://localhost" || process.env.FRONTEND_BASE_URL,
     credentials: true,
     exposedHeaders: ['X-XSRF-TOKEN']
   })
@@ -58,6 +63,7 @@ app.use(express.json())
 app.use(express.urlencoded({
     extended : true
 }))
+app.disable("x-powered-by")
 
 
 // Serve static files from the React app build folder
@@ -71,7 +77,6 @@ app.get("/favicon.ico", (req, res) => res.status(204).end());
 
 // Routes
 app.use("/api/dashboard", dashboardRoute);
-app.use("/api/users", userRoutes)
 app.use("/api/auth", authRoute)
 app.use("/api/auth", smsRoute)
 app.use("/api/subject", subjectRoute);
@@ -94,6 +99,10 @@ app.use("/api/upload/", uploadRoute); // Not complete
 app.use("/api/timetable/", timetableRoute); // Not complete
 
 app.use("/api/sms/", SMSResRoute);
+
+// AI
+app.use("/api/vector", vectorRoute)
+app.use("/api/ingest", ingestionRoute)
 
 
 // Handle client-side routing
@@ -140,5 +149,7 @@ app.use((err, req, res, next) => {
 
 // Port listening
 app.listen(PORT, () => {
-    console.log(`Server up and listening on http://localhost:${PORT}`)
+    console.log(
+      `Server up and listening on http://localhost:${PORT}`
+    );
 })
