@@ -53,7 +53,7 @@ const PORT = process.env.PORT || 5004
 // Middlewares
 app.use(
   cors({
-    origin: "http://localhost" || process.env.FRONTEND_BASE_URL,
+    origin: process.env.FRONTEND_BASE_URL || "http://localhost",
     credentials: true,
     exposedHeaders: ['X-XSRF-TOKEN']
   })
