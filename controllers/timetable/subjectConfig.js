@@ -15,7 +15,7 @@ export const getSubjectConfigs = async (req, res, next) => {
     if (!year || !form || !term || !utility) {
       return next(createError(400, "Missing required parameters"));
     }
-
+    
     const sanitizedYear = sanitizeStringVariables(year);
     const sanitizedForm = parseInt(sanitizeStringVariables(form));
     const sanitizedTerm = sanitizeStringVariables(term);
@@ -28,7 +28,7 @@ export const getSubjectConfigs = async (req, res, next) => {
     );
 
     if (parseInt(existingConfigs[0].count) === 0) {
-      const subjectsTable = `subjects_form_${sanitizedForm}`;
+      const subjectsTable = 'subjects';
 
       const { rows: tables } = await pool.query(
         `SELECT to_regclass($1) as exists`,
@@ -37,13 +37,13 @@ export const getSubjectConfigs = async (req, res, next) => {
 
       if (!tables[0].exists) {
         return next(
-          createError(404, `Subjects table ${subjectsTable} not found`)
+          createError(404, `Subjects table not found`)
         );
       }
 
       const { rows: subjects } = await pool.query(
-        `SELECT id, init FROM ${subjectsTable} WHERE status = $1`,
-        [1]
+        `SELECT id, init FROM ${subjectsTable} WHERE status = $1 AND level = $2`,
+        [1, sanitizedForm]
       );
 
       if (subjects.length === 0) {
@@ -140,7 +140,7 @@ export const getSubjectConfigs = async (req, res, next) => {
       }
     }
 
-    const subjectsTable = `subjects_form_${sanitizedForm}`;
+    const subjectsTable = `subjects`;
     const { rows: configs } = await pool.query(
       `
       SELECT sc.*, s.name
@@ -199,7 +199,7 @@ export const getAllSubjectConfigs = async (req, res, next) => {
     // Create configs for forms that don't have them
     const createConfigPromises = formArray.map(async (sanitizedForm, index) => {
       if (parseInt(existingConfigsResults[index].rows[0].count) === 0) {
-        const subjectsTable = `subjects_form_${sanitizedForm}`;
+        const subjectsTable = `subjects`;
 
         const { rows: tables } = await pool.query(
           `SELECT to_regclass($1) as exists`,
@@ -207,12 +207,12 @@ export const getAllSubjectConfigs = async (req, res, next) => {
         );
 
         if (!tables[0].exists) {
-          throw createError(404, `Subjects table ${subjectsTable} not found`);
+          throw createError(404, `Subjects table not found`);
         }
 
         const { rows: subjects } = await pool.query(
-          `SELECT id, init FROM ${subjectsTable} WHERE status = $1`,
-          [1]
+          `SELECT id, init FROM ${subjectsTable} WHERE status = $1 AND level = $2`,
+          [1, sanitizedForm]
         );
 
         if (subjects.length === 0) {
@@ -314,7 +314,7 @@ export const getAllSubjectConfigs = async (req, res, next) => {
 
     // Get configs for all forms
     const configPromises = formArray.map((sanitizedForm) => {
-      const subjectsTable = `subjects_form_${sanitizedForm}`;
+      const subjectsTable = `subjects`;
       return pool.query(
         `
         SELECT sc.*, s.name

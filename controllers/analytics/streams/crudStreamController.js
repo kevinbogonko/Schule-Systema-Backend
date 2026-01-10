@@ -170,6 +170,7 @@ export const getAllStreams = async (req, res, next) => {
 
     res.status(200).json(result.rows);
   } catch (err) {
+    console.log(err)
     if (err.code === "42P01") {
       // Table does not exist
       return next(

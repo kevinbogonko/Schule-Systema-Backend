@@ -130,12 +130,12 @@ export const getSubjectTeachersWithoutConstraints = async (req, res, next) => {
     const sanitizedForm = sanitizeStringVariables(form);
     const sanitizedYear = sanitizeStringVariables(year);
 
-    const subjectsTable = `subjects_form_${sanitizedForm}`;
-    const subjectTeachersTable = `subjectteachers_form_${sanitizedForm}`;
+    const subjectsTable = `subjects`;
+    const subjectTeachersTable = `subjectteachers`;
 
     // 3. Fetch subjects with status = 1
     const subjectResult = await pool.query(
-      `SELECT id, name, init FROM ${subjectsTable} WHERE status = 1`
+      `SELECT id, name, init FROM ${subjectsTable} WHERE status = 1 AND level = $1`, [sanitizedForm]
     );
     // subjectResult.rows.map((row) => console.log(row));
     const activeSubjects = subjectResult.rows.map((s) => ({
@@ -236,12 +236,12 @@ export const getAllSubjectTeachersWithoutConstraints = async (
 
     // Process each form in the forms array
     for (const form of sanitizedForms) {
-      const subjectsTable = `subjects_form_${form}`;
-      const subjectTeachersTable = `subjectteachers_form_${form}`;
+      const subjectsTable = `subjects`;
+      const subjectTeachersTable = `subjectteachers`;
 
       // 3. Fetch subjects with status = 1 for current form
       const subjectResult = await pool.query(
-        `SELECT id, name, init FROM ${subjectsTable} WHERE status = 1`
+        `SELECT id, name, init FROM ${subjectsTable} WHERE status = 1 AND level =$1`, [form]
       );
 
       const activeSubjects = subjectResult.rows.map((s) => ({
@@ -257,8 +257,8 @@ export const getAllSubjectTeachersWithoutConstraints = async (
       const teacherResult = await pool.query(
         `SELECT id, stream_id, teacher_id, subject_id, year, unival 
          FROM ${subjectTeachersTable} 
-         WHERE year = $1`,
-        [sanitizedYear]
+         WHERE year = $1 AND form =$2`,
+        [sanitizedYear, form]
       );
       const teacherRows = teacherResult.rows;
 
@@ -274,15 +274,15 @@ export const getAllSubjectTeachersWithoutConstraints = async (
 
       if (assignedSubjectIds.length > 0) {
         const placeholders = assignedSubjectIds
-          .map((_, i) => `$${i + 2}`)
+          .map((_, i) => `$${i + 3}`)
           .join(",");
         const detailedAssigned = await pool.query(
           `SELECT st.id, st.stream_id, st.subject_id, st.teacher_id, s.name AS subject_name, sf.title, sf.fname, sf.lname
            FROM ${subjectTeachersTable} st
            JOIN ${subjectsTable} s ON st.subject_id = s.id
            JOIN staff sf ON st.teacher_id = sf.id
-           WHERE st.year = $1 AND st.subject_id IN (${placeholders})`,
-          [sanitizedYear, ...assignedSubjectIds]
+           WHERE st.year = $1 AND s.level = $2 AND st.subject_id IN (${placeholders})`,
+          [sanitizedYear, form, ...assignedSubjectIds]
         );
 
         assignedSubjects = detailedAssigned.rows.map((row) => ({

@@ -1,5 +1,4 @@
 import express from 'express'
-import { generateSchoolTimetable } from "../../controllers/timetable/generateTimeTableController.js";
 import {
   addDayCluster,
   getDayClusters,
@@ -23,9 +22,6 @@ import { generateTeacherTTPDF } from "../../controllers/timetable/teacherTT.js";
 import { TTPDFData } from "../../controllers/timetable/ttPDFData.js";
 
 const router = express.Router()
-
-//  Endpoint
-router.get("/timetable", generateSchoolTimetable);
 
 // Day Cluster Registration Endpoint
 router.post("/adddaycluster", addDayCluster);

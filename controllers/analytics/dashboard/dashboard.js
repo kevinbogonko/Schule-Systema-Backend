@@ -38,7 +38,7 @@ export const DashboardData = async (req, res, next) => {
       // 3. Exams count
       let total_exams = 0;
       // use the specified form candidates depending on isCBC and pick only one form (first with exams)
-      const examFormCandidates = isCBC ? [6, 9] : [21, 22];
+      const examFormCandidates = isCBC ? [0, 3, 6, 9, 12] : [21, 22];
       const examTable = "exams";
 
       // validate table name (simple check)

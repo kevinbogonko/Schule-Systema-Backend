@@ -28,6 +28,8 @@ import uploadRoute from "./Routes/analytics/upload/uploadRoute.js";
 // SMS
 import SMSResRoute from "./Routes/analytics/sms/resultSMSRoute.js";
 
+import SystemLevelsRoute from "./Routes/SystemLevelRoute.js";
+
 
 // TIMETABLE
 import timetableRoute from "./Routes/timetable/timetableController.js"
@@ -99,6 +101,8 @@ app.use("/api/upload/", uploadRoute); // Not complete
 app.use("/api/timetable/", timetableRoute); // Not complete
 
 app.use("/api/sms/", SMSResRoute);
+
+app.use("/api/system/", SystemLevelsRoute);
 
 // AI
 app.use("/api/vector", vectorRoute)
