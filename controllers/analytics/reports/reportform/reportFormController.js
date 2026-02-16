@@ -1,3 +1,4 @@
+// 1. Add import statements
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import fs from "fs";
@@ -6,18 +7,20 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import sharp from "sharp";
 
+// 2. Get directory paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const system844 = [19,20,21,22]
+// 3. Define system844 array
+const system844 = [19, 20, 21, 22];
 
-// 1. HEADER FUNCTION - MODIFIED TO HANDLE WEBP IMAGES
+// 4. HEADER FUNCTION - MODIFIED TO HANDLE WEBP IMAGES
 const addHeader = async (doc, response) => {
   try {
     let logoPath;
     let imageBuffer;
 
-    // Check if custom logo exists
+    // 5. Check if custom logo exists
     if (
       response.schoolDetails &&
       response.schoolDetails[4] &&
@@ -32,7 +35,7 @@ const addHeader = async (doc, response) => {
       if (fs.existsSync(customLogoPath)) {
         logoPath = customLogoPath;
       } else {
-        // Check if webp version exists
+        // 6. Check if webp version exists
         const webpPath = customLogoPath.replace(/\.[^/.]+$/, ".webp");
         if (fs.existsSync(webpPath)) {
           logoPath = webpPath;
@@ -40,7 +43,7 @@ const addHeader = async (doc, response) => {
       }
     }
 
-    // Fallback to default logo if no custom logo found
+    // 7. Fallback to default logo if no custom logo found
     if (!logoPath) {
       const defaultLogoPath = path.join(
         __dirname,
@@ -62,7 +65,7 @@ const addHeader = async (doc, response) => {
       }
     }
 
-    // Convert webp to buffer if needed
+    // 8. Convert webp to buffer if needed
     if (logoPath.endsWith(".webp")) {
       imageBuffer = await sharp(logoPath).toFormat("png").toBuffer();
       doc.image(imageBuffer, 20, 20, { height: 50 });
@@ -70,6 +73,7 @@ const addHeader = async (doc, response) => {
       doc.image(logoPath, 20, 20, { height: 50 });
     }
 
+    // 9. Add school details text
     doc
       .font("Times-Bold")
       .fontSize(12)
@@ -100,7 +104,7 @@ const addHeader = async (doc, response) => {
   }
 };
 
-// 2. QR CODE GENERATION
+// 10. QR CODE GENERATION
 const generateQRCode = async (studentData, examDetails) => {
   try {
     const qrData = JSON.stringify({
@@ -125,7 +129,7 @@ const generateQRCode = async (studentData, examDetails) => {
   }
 };
 
-// 3. GRADE CONVERSION FOR 844
+// 11. GRADE CONVERSION FOR 844
 const gradeToValue = (grade) => {
   switch (grade) {
     case "A":
@@ -157,7 +161,7 @@ const gradeToValue = (grade) => {
   }
 };
 
-// 4. GRADE CONVERSION FOR CBC
+// 12. GRADE CONVERSION FOR CBC
 const gradeToValueCBC = (grade) => {
   switch (grade) {
     case "EE":
@@ -173,49 +177,60 @@ const gradeToValueCBC = (grade) => {
   }
 };
 
-// 5. DETERMINE SYSTEM TYPE
+// 13. DETERMINE SYSTEM TYPE
 const is844System = (form) => {
   const form844 = [19, 20, 21, 22];
   return form844.includes(parseInt(form));
 };
 
-// 6. MAIN PDF GENERATION
+// 14. MAIN PDF GENERATION
 export const generateStudentReportPdf = async (response) => {
   return new Promise(async (resolve, reject) => {
+    // 15. Create PDF document
     const doc = new PDFDocument({
       margin: 20,
       bufferPages: true,
       size: "A4",
     });
 
+    // 16. Setup document events
     const chunks = [];
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
     try {
+      // 17. Determine if CBC system
       const isCBC = !is844System(response.examDetails.form);
 
+      // 18. Process each student
       for (const [index, student] of response.studentResults.entries()) {
         try {
-          // Start new page for each student (except first)
+          // 19. Start new page for each student (except first)
           if (index > 0) {
             doc.addPage();
           }
 
-          // 1. Add Header
+          // 20. Add Header
           await addHeader(doc, response);
 
-          // 2. Main title - Different for CBC and 844
+          // 21. Main title - Different for CBC and 844
           const pageWidth = doc.page.width;
           const backgroundWidth = pageWidth - 40;
           const y = 85;
 
           doc.rect(20, y - 5, backgroundWidth, 20).fill("#bfdbfe");
 
+          const nonCBCFormMap = {
+            19 : 1,
+            20 : 2,
+            21 : 3,
+            22 : 4,
+          }
+
           const reportTitle = isCBC
             ? `TERM ${response.examDetails.term} - ${response.examDetails.examname} - SUMMATIVE ASSESSMENT REPORT ${response.examDetails.year}`.toUpperCase()
-            : `TERM ${response.examDetails.term} - ${response.examDetails.examname} - ASSESSMENT REPORT FORM ${response.examDetails.year}`.toUpperCase();
+            : `TERM ${response.examDetails.term} - ${response.examDetails.examname} - ASSESSMENT REPORT FORM ${nonCBCFormMap[response.examDetails.form]} - ${response.examDetails.year}`.toUpperCase();
 
           doc
             .fillColor("black")
@@ -227,22 +242,22 @@ export const generateStudentReportPdf = async (response) => {
 
           doc.moveDown(0.5);
 
-          // 3. Student info section
+          // 22. Student info section
           const imageWidth = 60;
           const imageY = 105;
 
-          // Load student image or fallback - MODIFIED TO HANDLE WEBP
+          // 23. Load student image or fallback
           let imagePath = student.image_path
             ? path.join(__dirname, "../../../../public", student.image_path)
             : path.join(__dirname, "../../images/", "user_p.jpeg");
 
           if (!fs.existsSync(imagePath)) {
-            // Check for webp version if original doesn't exist
+            // 24. Check for webp version if original doesn't exist
             const webpPath = imagePath.replace(/\.[^/.]+$/, ".webp");
             if (fs.existsSync(webpPath)) {
               imagePath = webpPath;
             } else {
-              // Fallback to default images
+              // 25. Fallback to default images
               const defaultImagePath = path.join(
                 __dirname,
                 "../../../../public/images/defaults",
@@ -264,7 +279,7 @@ export const generateStudentReportPdf = async (response) => {
             }
           }
 
-          // Handle webp images for student photos
+          // 26. Handle webp images for student photos
           if (imagePath.endsWith(".webp")) {
             try {
               const imageBuffer = await sharp(imagePath)
@@ -276,7 +291,7 @@ export const generateStudentReportPdf = async (response) => {
               });
             } catch (err) {
               console.error("Error processing webp image:", err);
-              // Fallback to default image if webp processing fails
+              // 27. Fallback to default image if webp processing fails
               const defaultImagePath = path.join(
                 __dirname,
                 "../../../../public/images/defaults",
@@ -304,6 +319,7 @@ export const generateStudentReportPdf = async (response) => {
           const textX = lineX + 10;
           const textY = imageY;
 
+          // 28. Add student info text
           doc
             .fontSize(10)
             .fillColor("black")
@@ -319,17 +335,21 @@ export const generateStudentReportPdf = async (response) => {
             })
             .moveDown(0.5)
             .text(
-              `${system844.includes(response.examDetails.formFORM) ? 'FORM' : 'GRADE'} : ${response.examDetails.form}`.toUpperCase(),
+              `${
+                system844.includes(Number(response.examDetails.form))
+                  ? "FORM"
+                  : "GRADE"
+              } : ${system844.includes(Number(response.examDetails.form)) ? nonCBCFormMap[response.examDetails.form] : response.examDetails.form}`.toUpperCase(),
               textX,
               textY + 24,
-              { width: 300, align: "left" }
+              { width: 300, align: "left" },
             )
             .moveDown(0.5)
             .text(
               `STREAM : ${student.stream}`.toUpperCase(),
               textX,
               textY + 36,
-              { width: 300, align: "left" }
+              { width: 300, align: "left" },
             )
             .moveDown(0.5);
 
@@ -340,7 +360,7 @@ export const generateStudentReportPdf = async (response) => {
             });
           }
 
-          // 4. Performance graph
+          // 29. Performance graph
           const perfGraphX = textX + 250;
           const perfGraphY = textY;
           const perfGraphWidth = pageWidth - perfGraphX - 40;
@@ -405,7 +425,7 @@ export const generateStudentReportPdf = async (response) => {
             .fillColor("#2196f3")
             .fill();
 
-          // 5. Metrics section - Different for CBC and 844
+          // 30. Metrics section
           const rectHeight = 35;
           const rectY = imageY + lineHeight + 5;
           const rectWidth = pageWidth - 40;
@@ -414,7 +434,7 @@ export const generateStudentReportPdf = async (response) => {
           let columnWidth;
 
           if (isCBC) {
-            // CBC: Display EE, ME, AE, BE legend
+            // 31. CBC: Display EE, ME, AE, BE legend
             metrics = [
               { label: "EE(4)", value: "Exceeds Expectation" },
               { label: "ME(3)", value: "Meets Expectation" },
@@ -423,7 +443,7 @@ export const generateStudentReportPdf = async (response) => {
             ];
             columnWidth = rectWidth / 4;
           } else {
-            // 844: Display regular metrics
+            // 32. 844: Display regular metrics
             metrics = [
               { label: "Total Marks", value: student.total_marks },
               { label: "Total Points", value: student.total_points },
@@ -448,6 +468,7 @@ export const generateStudentReportPdf = async (response) => {
 
           doc.font("Times-Bold").fillColor("white");
 
+          // 33. Draw metrics
           metrics.forEach((item, i) => {
             const x = 25 + columnWidth * i;
 
@@ -472,46 +493,67 @@ export const generateStudentReportPdf = async (response) => {
               .stroke();
           }
 
-          // 6. Results table - Different structure for CBC and 844
+          // 34. Results table
           const tableStartY = rectY + rectHeight + 10;
 
           let staticColumns;
           let baseWidths;
 
           if (isCBC) {
-            // CBC table structure - ALWAYS SHOW 3 ASSESSMENT COLUMNS (STATIC)
-            // Define static assessment types (you can change these names as needed)
-            const staticAssessmentTypes = ["CAT 1", "CAT 2", "Exam"];
-
-            staticColumns = [{ key: "subject", label: "Learning Area" }];
-
-            // Add 3 static Assessment columns with Score and PL subcolumns
-            staticAssessmentTypes.forEach((assessmentType, index) => {
-              staticColumns.push({
-                key: `assessment_${index + 1}_score`,
-                label: `${assessmentType} - Score`,
-                parentLabel: `Assessment ${index + 1}`,
+            // 35. CBC table structure
+            staticColumns = [
+              { key: "code", label: "Code" },
+              { key: "subject", label: "Learning Area" },
+              {
+                key: "assessment_1_score",
+                label: "Score",
+                parentLabel: "Assessment 1",
                 isSubColumn: true,
-              });
-              staticColumns.push({
-                key: `assessment_${index + 1}_pl`,
-                label: `${assessmentType} - PL`,
-                parentLabel: `Assessment ${index + 1}`,
+              },
+              {
+                key: "assessment_1_pl",
+                label: "PL",
+                parentLabel: "Assessment 1",
                 isSubColumn: true,
-              });
-            });
+              },
+              {
+                key: "assessment_2_score",
+                label: "Score",
+                parentLabel: "Assessment 2",
+                isSubColumn: true,
+              },
+              {
+                key: "assessment_2_pl",
+                label: "PL",
+                parentLabel: "Assessment 2",
+                isSubColumn: true,
+              },
+              {
+                key: "assessment_3_score",
+                label: "Score",
+                parentLabel: "Assessment 3",
+                isSubColumn: true,
+              },
+              {
+                key: "assessment_3_pl",
+                label: "PL",
+                parentLabel: "Assessment 3",
+                isSubColumn: true,
+              },
+            ];
 
             baseWidths = {
-              subject: 120,
+              code: 40,
+              subject: 100,
+              assessment_1_score: 40,
+              assessment_1_pl: 35,
+              assessment_2_score: 40,
+              assessment_2_pl: 35,
+              assessment_3_score: 40,
+              assessment_3_pl: 35,
             };
-
-            // Set widths for all 3 static assessment columns
-            for (let i = 1; i <= 3; i++) {
-              baseWidths[`assessment_${i}_score`] = 40;
-              baseWidths[`assessment_${i}_pl`] = 35;
-            }
           } else {
-            // 844 table structure (original)
+            // 36. 844 table structure
             const markTypes = new Set();
             student.results.forEach((result) => {
               Object.keys(result.marks).forEach((key) => {
@@ -576,30 +618,30 @@ export const generateStudentReportPdf = async (response) => {
           let tableData;
 
           if (isCBC) {
-            // CBC table data - MAP DYNAMIC DATA TO STATIC COLUMNS
+            // 37. CBC table data
             tableData = student.results.map((result) => {
               const row = {
+                code: result.code || "",
                 subject: result.subject,
               };
 
-              // Get all available mark types from the result
+              // 38. Get all available mark types from the result
               const availableMarkTypes = Object.keys(result.marks).filter(
                 (key) => key !== "mark" && key !== "grade"
               );
 
-              // Map available data to our 3 static assessment columns
-              // We'll distribute the available data across the 3 columns
+              // 39. Map available data to our 3 static assessment columns
               for (let i = 1; i <= 3; i++) {
                 const scoreKey = `assessment_${i}_score`;
                 const plKey = `assessment_${i}_pl`;
 
                 if (i - 1 < availableMarkTypes.length) {
-                  // If we have data for this position, use it
                   const markType = availableMarkTypes[i - 1];
-                  row[scoreKey] = result.marks[markType] || "";
+                  const scoreValue = result.marks[markType];
+
+                  row[scoreKey] = scoreValue === 0 ? "0" : scoreValue || "";
                   row[plKey] = result.marks.grade || "";
                 } else {
-                  // If no data for this position, leave empty
                   row[scoreKey] = "";
                   row[plKey] = "";
                 }
@@ -608,12 +650,12 @@ export const generateStudentReportPdf = async (response) => {
               return row;
             });
           } else {
-            // 844 table data (original)
+            // 40. 844 table data
             tableData = student.results.map((result) => {
               const row = {
                 code: result.code,
                 subject: result.subject,
-                mark: result.marks.mark,
+                mark: result.marks.mark === 0 ? "0" : result.marks.mark,
                 grade: result.marks.grade,
                 points: result.points,
                 rank: result.rank,
@@ -624,7 +666,8 @@ export const generateStudentReportPdf = async (response) => {
               Object.keys(result.marks).forEach((markType) => {
                 if (markType !== "mark" && markType !== "grade") {
                   const key = markType.toLowerCase().replace(" ", "_");
-                  row[key] = result.marks[markType] || "";
+                  const value = result.marks[markType];
+                  row[key] = value === 0 ? "0" : value || "";
                 }
               });
 
@@ -634,9 +677,10 @@ export const generateStudentReportPdf = async (response) => {
 
           const startX = 20;
           const startY = tableStartY;
-          const headerRowHeight = isCBC ? 40 : 30;
+          const headerRowHeight = 40; // Increased height for split header
           const rowHeight = 20;
 
+          // 41. Draw table header background
           doc
             .rect(startX, startY, totalTableWidth, headerRowHeight)
             .fill("#BFDBFE");
@@ -646,99 +690,100 @@ export const generateStudentReportPdf = async (response) => {
             .fontSize(isCBC ? 9 : 10)
             .fillColor("black");
 
-          let x = startX;
-
           if (isCBC) {
-            // CBC: Draw parent headers for Assessment columns
-            const assessmentGroups = [];
-            let currentAssessment = null;
-            let assessmentStartX = null;
+            // 42. MODIFIED: Split header into two horizontal bars
+            // First, calculate column positions
+            let columnPositions = [];
+            let currentX = startX;
 
             staticColumns.forEach((col, index) => {
               const width = baseWidths[col.key];
+              columnPositions.push({
+                col,
+                startX: currentX,
+                endX: currentX + width,
+                width: width,
+              });
+              currentX += width;
+            });
 
-              if (col.isSubColumn) {
-                if (
-                  !currentAssessment ||
-                  currentAssessment !== col.parentLabel
-                ) {
-                  if (currentAssessment) {
-                    assessmentGroups.push({
-                      label: currentAssessment,
-                      startX: assessmentStartX,
-                      endX: x,
-                    });
-                  }
-                  currentAssessment = col.parentLabel;
-                  assessmentStartX = x;
-                }
-              } else {
-                if (currentAssessment) {
-                  assessmentGroups.push({
-                    label: currentAssessment,
-                    startX: assessmentStartX,
-                    endX: x,
-                  });
-                  currentAssessment = null;
-                }
+            // 43. Draw upper bar (split into 4 sections)
+            const upperBarHeight = 20;
+            const lowerBarHeight = 20;
+
+            // Draw horizontal divider line
+            doc
+              .moveTo(startX, startY + upperBarHeight)
+              .lineTo(startX + totalTableWidth, startY + upperBarHeight)
+              .lineWidth(0.5)
+              .strokeColor("#9CA3AF")
+              .stroke();
+
+            // 44. Define the 4 sections for upper bar
+            const sections = [
+              { label: "", startCol: 0, endCol: 1 }, // First section (no label) - Code & Learning Area
+              { label: "Assessment 1", startCol: 2, endCol: 3 }, // Second section - Score & PL for Assessment 1
+              { label: "Assessment 2", startCol: 4, endCol: 5 }, // Third section - Score & PL for Assessment 2
+              { label: "Assessment 3", startCol: 6, endCol: 7 }, // Fourth section - Score & PL for Assessment 3
+            ];
+
+            // 45. Draw upper bar sections
+            sections.forEach((section) => {
+              const startXPos = columnPositions[section.startCol].startX;
+              const endXPos = columnPositions[section.endCol].endX;
+              const sectionWidth = endXPos - startXPos;
+
+              if (section.label) {
+                // Center the label in the section
+                doc.text(section.label, startXPos, startY + 5, {
+                  width: sectionWidth,
+                  align: "center",
+                });
               }
 
-              x += width;
-            });
-
-            if (currentAssessment) {
-              assessmentGroups.push({
-                label: currentAssessment,
-                startX: assessmentStartX,
-                endX: x,
-              });
-            }
-
-            // Draw parent assessment headers
-            assessmentGroups.forEach((group) => {
-              const groupWidth = group.endX - group.startX;
-              doc.text(group.label, group.startX + 5, startY + 5, {
-                width: groupWidth - 10,
-                align: "center",
-              });
-
-              // Draw divider line
-              doc
-                .moveTo(group.startX, startY + 18)
-                .lineTo(group.endX, startY + 18)
-                .lineWidth(0.5)
-                .strokeColor("#9CA3AF")
-                .stroke();
-            });
-
-            // Draw sub-column headers
-            x = startX;
-            staticColumns.forEach((col, colIndex) => {
-              const width = baseWidths[col.key];
-
-              const subHeaderY = col.isSubColumn ? startY + 20 : startY + 5;
-              const subHeaderLabel = col.isSubColumn
-                ? col.label.split(" - ")[1]
-                : col.label;
-
-              doc.text(subHeaderLabel, x + 5, subHeaderY, {
-                width: width - 10,
-                align: "center",
-              });
-
-              if (colIndex > 0) {
-                
+              // Draw vertical dividers between sections (except for first section)
+              if (section.startCol > 0) {
                 doc
-                  .moveTo(x, startY)
-                  .lineTo(x, startY + headerRowHeight)
+                  .moveTo(startXPos, startY)
+                  .lineTo(startXPos, startY + upperBarHeight)
                   .lineWidth(0.5)
                   .strokeColor("#9CA3AF")
                   .stroke();
               }
-              x += width;
+            });
+
+            // 46. Draw lower bar with column labels
+            const lowerBarY = startY + upperBarHeight;
+
+            columnPositions.forEach((colPos, index) => {
+              const col = colPos.col;
+              const width = colPos.width;
+              const colX = colPos.startX;
+
+              // Center the label in the lower bar
+              const textHeight = doc.heightOfString(col.label, {
+                width: width - 10,
+              });
+              const verticalPadding = (lowerBarHeight - textHeight) / 2;
+
+              doc.text(col.label, colX + 5, lowerBarY + verticalPadding, {
+                width: width - 10,
+                align: "center",
+              });
+
+              // Draw vertical dividers between all columns
+              if (index > 0) {
+                doc
+                  .moveTo(colX, lowerBarY)
+                  .lineTo(colX, lowerBarY + lowerBarHeight)
+                  .lineWidth(0.5)
+                  .strokeColor("#9CA3AF")
+                  .stroke();
+              }
             });
           } else {
-            // 844: Original header drawing
+            // 47. 844: Original header drawing (unchanged)
+            let x = startX;
             staticColumns.forEach((col) => {
               const width = baseWidths[col.key];
 
@@ -770,6 +815,7 @@ export const generateStudentReportPdf = async (response) => {
 
           let currentY = startY + headerRowHeight;
 
+          // 48. Draw table rows
           tableData.forEach((row, rowIndex) => {
             let colX = startX;
 
@@ -820,7 +866,7 @@ export const generateStudentReportPdf = async (response) => {
             .strokeColor("#9CA3AF")
             .stroke();
 
-          // 7. Bottom section
+          // 49. Bottom section
           const verticalLineYStart = currentY + 20;
           const verticalLineHeight = 225;
           const pageMiddleX = pageWidth / 2;
@@ -832,7 +878,7 @@ export const generateStudentReportPdf = async (response) => {
             .strokeColor("#9CA3AF")
             .stroke();
 
-          // 8. Grade comparison graph (only for 844)
+          // 50. Grade comparison graph (only for 844)
           if (!isCBC) {
             const graphMargin = 10;
             const graphX = 20;
@@ -912,7 +958,7 @@ export const generateStudentReportPdf = async (response) => {
               });
           }
 
-          // 9. School dates
+          // 51. School dates
           const schoolDatesY = isCBC
             ? verticalLineYStart + 10
             : verticalLineYStart + 160;
@@ -931,7 +977,7 @@ export const generateStudentReportPdf = async (response) => {
             .text(`Closing Date : 30/03/2025`, 25, schoolDatesY + 30)
             .text(`Opening Date : 28/04/2025`, 25, schoolDatesY + 45);
 
-          // 10. Remarks section
+          // 52. Remarks section
           const classTeacherSignaturePath =
             student.classTeacherSignature || null;
           const principalSignaturePath = student.principalSignature || null;
@@ -1029,7 +1075,7 @@ export const generateStudentReportPdf = async (response) => {
               { width: pageMiddleX - 30 - 200 }
             );
 
-          // 11. QR Code
+          // 53. QR Code
           const qrCode = await generateQRCode(student, response.examDetails);
           if (qrCode) {
             const qrX = pageMiddleX + 10;
@@ -1068,6 +1114,7 @@ export const generateStudentReportPdf = async (response) => {
         }
       }
 
+      // 54. End document
       doc.end();
     } catch (err) {
       console.error("PDF generation failed:", err);
@@ -1076,6 +1123,7 @@ export const generateStudentReportPdf = async (response) => {
   });
 };
 
+// 55. Export module
 export default {
   generateStudentReportPdf,
   helpers: {

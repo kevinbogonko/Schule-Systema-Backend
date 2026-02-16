@@ -200,12 +200,12 @@ async function updateStudentRecordsForExam(
         (exam_id, subject_id, uni_val,
          e0, e1, dm0, dm1, d0, d1, dp0, dp1,
          cm0, cm1, c0, c1, cp0, cp1, bm0, bm1,
-         b0, b1, bp0, bp1, am0, am1, a0, a1, be0, be1, ae0, ae1, me0, me1, ee0, ee1)
+         b0, b1, bp0, bp1, am0, am1, a0, a1, be20, be21, be10, be11, ae20, ae21, ae10, ae11,  me20, me21, me10, me11, ee20, ee21, ee10, ee11)
        VALUES
         ($1, $2, $3,
          0, 29, 30, 34, 35, 39, 40, 44, 45,
          49, 50, 54, 55, 59, 60, 64, 65, 69,
-         70, 74, 75, 79, 80, 100, 0, 24, 25, 49, 50, 74, 75, 100)
+         70, 74, 75, 79, 80, 100, 0, 29, 30, 39, 40, 49, 50, 59, 60, 69, 70, 79, 80, 89, 90, 100)
        ON CONFLICT (uni_val) DO UPDATE SET
          e0 = EXCLUDED.e0,
          e1 = EXCLUDED.e1,
@@ -231,14 +231,22 @@ async function updateStudentRecordsForExam(
          am1 = EXCLUDED.am1,
          a0 = EXCLUDED.a0,
          a1 = EXCLUDED.a1,
-         be0 = EXCLUDED.be0,
-         be1 = EXCLUDED.be1,
-         ae0 = EXCLUDED.ae0,
-         ae1 = EXCLUDED.ae1,
-         me0 = EXCLUDED.me0,
-         me1 = EXCLUDED.me1,
-         ee0 = EXCLUDED.ee0,
-         ee1 = EXCLUDED.ee1;`,
+         be20 = EXCLUDED.be20,
+         be21 = EXCLUDED.be21,
+         be10 = EXCLUDED.be10,
+         be11 = EXCLUDED.be11,
+         ae20 = EXCLUDED.ae20,
+         ae21 = EXCLUDED.ae21,
+         ae10 = EXCLUDED.ae10,
+         ae11 = EXCLUDED.ae11,
+         me20 = EXCLUDED.me20,
+         me21 = EXCLUDED.me21,
+         me10 = EXCLUDED.me10,
+         me11 = EXCLUDED.me11,
+         ee20 = EXCLUDED.ee20,
+         ee21 = EXCLUDED.ee21,
+         ee10 = EXCLUDED.ee10,
+         ee11 = EXCLUDED.ee11;`,
       [examId, subject.id, gsUniVal]
     );
   }
@@ -328,12 +336,12 @@ async function addNewExamWithData(
         (exam_id, subject_id, uni_val,
          e0, e1, dm0, dm1, d0, d1, dp0, dp1,
          cm0, cm1, c0, c1, cp0, cp1, bm0, bm1,
-         b0, b1, bp0, bp1, am0, am1, a0, a1, be0, be1, ae0, ae1, me0, me1, ee0, ee1)
+         b0, b1, bp0, bp1, am0, am1, a0, a1, be20, be21, be10, be11, ae20, ae21, ae10, ae11,  me20, me21, me10, me11, ee20, ee21, ee10, ee11)
        VALUES
         ($1, $2, $3,
          0, 29, 30, 34, 35, 39, 40, 44, 45,
          49, 50, 54, 55, 59, 60, 64, 65, 69,
-         70, 74, 75, 79, 80, 100, 0, 24, 25, 49, 50, 74, 75, 100)
+         70, 74, 75, 79, 80, 100, 0, 29, 30, 39, 40, 49, 50, 59, 60, 69, 70, 79, 80, 89, 90, 100)
        ON CONFLICT (uni_val) DO UPDATE SET
          e0 = EXCLUDED.e0,
          e1 = EXCLUDED.e1,
@@ -359,14 +367,22 @@ async function addNewExamWithData(
          am1 = EXCLUDED.am1,
          a0 = EXCLUDED.a0,
          a1 = EXCLUDED.a1,
-         be0 = EXCLUDED.be0,
-         be1 = EXCLUDED.be1,
-         ae0 = EXCLUDED.ae0,
-         ae1 = EXCLUDED.ae1,
-         me0 = EXCLUDED.me0,
-         me1 = EXCLUDED.me1,
-         ee0 = EXCLUDED.ee0,
-         ee1 = EXCLUDED.ee1;`,
+         be20 = EXCLUDED.be20,
+         be21 = EXCLUDED.be21,
+         be10 = EXCLUDED.be10,
+         be11 = EXCLUDED.be11,
+         ae20 = EXCLUDED.ae20,
+         ae21 = EXCLUDED.ae21,
+         ae10 = EXCLUDED.ae10,
+         ae11 = EXCLUDED.ae11,
+         me20 = EXCLUDED.me20,
+         me21 = EXCLUDED.me21,
+         me10 = EXCLUDED.me10,
+         me11 = EXCLUDED.me11,
+         ee20 = EXCLUDED.ee20,
+         ee21 = EXCLUDED.ee21,
+         ee10 = EXCLUDED.ee10,
+         ee11 = EXCLUDED.ee11;`,
       [examId, subject.id, gsUniVal]
     );
   }

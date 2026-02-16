@@ -80,10 +80,14 @@ export const studentReportMarks = async (req, res, next) => {
 
     // Points scale for CBC grading
     const pointsScaleCBC = {
-      BE: 13,
-      AE: 14,
-      ME: 15,
-      EE: 16,
+      BE2: 13,
+      BE1: 14,
+      AE2: 15,
+      AE1: 16,
+      ME2: 17,
+      ME1: 18,
+      EE2: 19,
+      EE1: 20,
     };
 
     // Grade point scale for AG grade (Forms 3 & 4 - 844 system)
@@ -269,10 +273,14 @@ export const studentReportMarks = async (req, res, next) => {
 
       // Store CBC grading scheme
       gradingMapCBC.set(row.subject_id, {
-        BE: { min: row.be0, max: row.be1 },
-        AE: { min: row.ae0, max: row.ae1 },
-        ME: { min: row.me0, max: row.me1 },
-        EE: { min: row.ee0, max: row.ee1 },
+        BE2: { min: row.be20, max: row.be21 },
+        BE1: { min: row.be10, max: row.be11 },
+        AE2: { min: row.ae20, max: row.ae21 },
+        AE1: { min: row.ae10, max: row.ae11 },
+        ME2: { min: row.me20, max: row.me21 },
+        ME1: { min: row.me10, max: row.me11 },
+        EE2: { min: row.ee20, max: row.ee21 },
+        EE1: { min: row.ee10, max: row.ee11 },
       });
     });
 
@@ -285,13 +293,13 @@ export const studentReportMarks = async (req, res, next) => {
 
     const getGradeAndPoints = (mark, subjectId) => {
       if (mark === null || mark === undefined || isNaN(mark)) {
-        return { grade: isCBC ? "BE" : "N/A", points: 0 };
+        return { grade: isCBC ? "BE2" : "N/A", points: 0 };
       }
 
       const gradeRanges = gradingMap.get(subjectId);
       if (!gradeRanges) {
         console.warn(`⚠️ No grading criteria found for subject ${subjectId}`);
-        return { grade: isCBC ? "BE" : "N/A", points: 0 };
+        return { grade: isCBC ? "BE2" : "N/A", points: 0 };
       }
 
       const numericMark = typeof mark === "string" ? parseFloat(mark) : mark;
@@ -304,11 +312,11 @@ export const studentReportMarks = async (req, res, next) => {
       }
 
       if (isCBC) {
-        if (numericMark < gradeRanges["BE"].min) {
-          return { grade: "BE", points: pointsScaleCBC["BE"] };
+        if (numericMark < gradeRanges["BE2"].min) {
+          return { grade: "BE2", points: pointsScaleCBC["BE2"] };
         }
-        if (numericMark > gradeRanges["EE"].max) {
-          return { grade: "EE", points: pointsScaleCBC["EE"] };
+        if (numericMark > gradeRanges["EE1"].max) {
+          return { grade: "EE1", points: pointsScaleCBC["EE1"] };
         }
       } else {
         if (numericMark < gradeRanges["E"].min) {
@@ -319,7 +327,7 @@ export const studentReportMarks = async (req, res, next) => {
         }
       }
 
-      return { grade: isCBC ? "BE" : "N/A", points: 0 };
+      return { grade: isCBC ? "BE2" : "N/A", points: 0 };
     };
 
     console.log("👨‍🎓 Fetching students...");
@@ -672,6 +680,7 @@ export const studentReportMarks = async (req, res, next) => {
       );
     }
 
+
     console.log("🏆 Calculating ranks...");
     const allStudents = Array.from(studentMap.values());
     allStudents.sort((a, b) => b.totalMarks - a.totalMarks);
@@ -782,10 +791,14 @@ export const studentReportMarks = async (req, res, next) => {
 
     // Helper function to get AG grade for CBC system
     function getAgGradeCBC(averagePoints) {
-      if (averagePoints >= 15.5) return "EE";
-      if (averagePoints >= 14.5) return "ME";
-      if (averagePoints >= 13.5) return "AE";
-      return "BE";
+      if (averagePoints >= 19.5) return "EE1";
+      if (averagePoints >= 18.5) return "EE2";
+      if (averagePoints >= 17.5) return "ME1";
+      if (averagePoints >= 16.5) return "ME2";
+      if (averagePoints >= 15.5) return "AE1";
+      if (averagePoints >= 14.5) return "AE2";
+      if (averagePoints >= 13.5) return "BE1";
+      return "BE2";
     }
 
     // Function to calculate AG grade from previous exam data for 844 system
@@ -1177,10 +1190,14 @@ export const studentReportMarks = async (req, res, next) => {
         console.log(
           `📋 Preparing response for student ${student.id}: ${student.name}`
         );
-        const totalPossibleMarks = student.includedSubjects.length * 100;
+        // const totalPossibleMarks = student.includedSubjects.length * 100;
+        // const totalPossiblePoints = isCBC
+        //   ? student.includedSubjects.length * 16
+        //   : student.includedSubjects.length * 12;
+        const totalPossibleMarks = isCBC ? student.includedSubjects.length * 100 : 700;
         const totalPossiblePoints = isCBC
           ? student.includedSubjects.length * 16
-          : student.includedSubjects.length * 12;
+          : 84;
 
         // Calculate AG grade from CURRENT data (req.body form, term, year)
         let agGrade;
@@ -1250,7 +1267,7 @@ export const studentReportMarks = async (req, res, next) => {
         let principalName = "N/A";
         try {
           const principalRes = await pool.query(
-            "SELECT id FROM staff WHERE id = 4520"
+            "SELECT id FROM staff WHERE isprincipal = true"
           );
           if (principalRes.rows.length > 0) {
             const principalId = parseInt(principalRes.rows[0].id);

@@ -766,66 +766,98 @@ export const subjectExistInExamTable = async (req, res, next) => {
 
 // GET STUDENT MARKS FOR CERTAIN SUBJECT
 export const ExamSubjectMarks = async (req, res, next) => {
-  // 1. Ensure request is JSON
   if (!req.is("application/json")) {
     return next(
       createError(415, "Unsupported Media Type: Expected application/json")
     );
   }
 
-  // 2. Destructure inputs and constants
   const { form, exam_id, subject } = req.body;
   const nonCBCForms = [19, 20, 21, 22];
   const examTermTable = "exam";
 
-  // 3. Basic presence validation
   if (form === undefined || exam_id === undefined || subject === undefined) {
     return next(
       createError(400, "Missing required parameters: form, exam_id, subject")
     );
   }
 
-  // 4. Parse and validate numeric inputs
   const parsedForm = Number(form);
   const parsedExamId = Number(exam_id);
-  if (Number.isNaN(parsedForm) || Number.isNaN(parsedExamId)) {
-    return next(createError(400, "form and exam_id must be valid numbers"));
-  }
-  if (!Number.isInteger(parsedForm) || !Number.isInteger(parsedExamId)) {
-    return next(createError(400, "form and exam_id must be integers"));
+
+  if (
+    Number.isNaN(parsedForm) ||
+    Number.isNaN(parsedExamId) ||
+    !Number.isInteger(parsedForm) ||
+    !Number.isInteger(parsedExamId)
+  ) {
+    return next(createError(400, "form and exam_id must be valid integers"));
   }
 
-  // 5. Validate subject column name (only allow letters, numbers and underscore)
-  //    and prevent SQL identifier injection.
   const subjectPattern = /^[a-zA-Z0-9_]+$/;
   if (!subjectPattern.test(String(subject))) {
     return next(createError(400, "Invalid subject column name"));
   }
-  const sanitizedSubject = String(subject);
 
-  // 6. Acquire a client from the pool
+  const sanitizedSubject = String(subject).toLowerCase();
+
   let client;
   try {
     client = await pool.connect();
 
-    // 7. Ensure exam table exists
-    const tableExistsRes = await client.query(
-      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1) AS exists`,
-      [examTermTable.toLowerCase()]
+    /* ----------------------------------------------------
+       1. Check if subject is selective
+    ---------------------------------------------------- */
+    const subjectRes = await client.query(
+      `
+      SELECT isselective
+      FROM subjects
+      WHERE id = $1 AND level = $2
+      `,
+      [sanitizedSubject, parsedForm]
     );
 
-    if (!tableExistsRes.rows[0].exists) {
-      return next(createError(404, "Exam table not found"));
+    if (subjectRes.rowCount === 0) {
+      return next(createError(404, "Subject not found"));
     }
 
-    // 8. Ensure the main subject column exists
+    const isSelective = Number(subjectRes.rows[0].isselective) === 1;
+
+    /* ----------------------------------------------------
+       2. If selective → get allowed student IDs
+    ---------------------------------------------------- */
+    let selectiveStudentIds = null;
+
+    if (isSelective) {
+      const selectiveRes = await client.query(
+        `
+        SELECT student_id
+        FROM selectives
+        WHERE "${sanitizedSubject}" = 1
+        `
+      );
+
+      selectiveStudentIds = selectiveRes.rows.map((row) => row.student_id);
+
+      // No student selected for this subject
+      if (selectiveStudentIds.length === 0) {
+        return next(createError(404, "No students selected for this subject"));
+      }
+    }
+
+    /* ----------------------------------------------------
+       3. Ensure subject column exists in exam table
+    ---------------------------------------------------- */
     const mainColumnRes = await client.query(
-      `SELECT EXISTS (
-         SELECT FROM information_schema.columns
-         WHERE table_name = $1
-         AND column_name = $2
-       ) AS exists`,
-      [examTermTable.toLowerCase(), sanitizedSubject.toLowerCase()]
+      `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = $1
+        AND column_name = $2
+      ) AS exists
+      `,
+      [examTermTable, sanitizedSubject]
     );
 
     if (!mainColumnRes.rows[0].exists) {
@@ -837,50 +869,63 @@ export const ExamSubjectMarks = async (req, res, next) => {
       );
     }
 
-    // 9. Find all paper columns for this subject (subject_%)
+    /* ----------------------------------------------------
+       4. Get paper columns
+    ---------------------------------------------------- */
     const paperColumnsRes = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_name = $1
-       AND column_name LIKE $2
-       ORDER BY column_name`,
-      [examTermTable.toLowerCase(), `${sanitizedSubject.toLowerCase()}_%`]
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = $1
+      AND column_name LIKE $2
+      ORDER BY column_name
+      `,
+      [examTermTable, `${sanitizedSubject}_%`]
     );
 
     const paperColumns = paperColumnsRes.rows.map((r) => r.column_name);
 
-    // 10. Build the SELECT column list safely (identifiers controlled by validation above)
-    //     Use double quotes so column names with mixed case are preserved if needed.
+    /* ----------------------------------------------------
+       5. Build SELECT columns
+    ---------------------------------------------------- */
     const selectColumns = [
       `m.id`,
       `s.fname`,
       `s.lname`,
-      `m."${sanitizedSubject.toLowerCase()}" AS "${sanitizedSubject}"`,
+      `m."${sanitizedSubject}" AS "${sanitizedSubject}"`,
       ...paperColumns.map((col) => `m."${col}"`),
     ];
 
-    // 11. Build and run the parameterized query
+    /* ----------------------------------------------------
+       6. Build WHERE clause conditionally
+    ---------------------------------------------------- */
+    const params = [parsedForm, parsedExamId];
+    let selectiveFilter = "";
+
+    if (isSelective) {
+      params.push(selectiveStudentIds);
+      selectiveFilter = `AND m.id = ANY($${params.length})`;
+    }
+
     const sql = `
       SELECT ${selectColumns.join(", ")}
       FROM "${examTermTable}" AS m
       JOIN students AS s ON m.id = s.id
-      WHERE s.current_form = $1 AND m.exam_id = $2
+      WHERE s.current_form = $1
+        AND m.exam_id = $2
+        ${selectiveFilter}
       ORDER BY s.fname, s.lname
     `;
 
-    const result = await client.query(sql, [parsedForm, parsedExamId]);
+    const result = await client.query(sql, params);
 
-    // 12. If no rows, return 404
     if (result.rows.length === 0) {
-      const label = nonCBCForms.includes(parsedForm)
-        ? "subject"
-        : "learning area";
-      return next(
-        createError(404, `No student marks found for this ${label}.`)
-      );
+      return next(createError(404, "No student marks found for this subject"));
     }
 
-    // 13. Transform rows to consistent JSON shape and fill missing paper columns with 0
+    /* ----------------------------------------------------
+       7. Normalize output
+    ---------------------------------------------------- */
     const transformedResults = result.rows.map((row) => {
       const base = {
         id: row.id,
@@ -896,7 +941,6 @@ export const ExamSubjectMarks = async (req, res, next) => {
       return base;
     });
 
-    // 14. Return results
     return res.status(200).json(transformedResults);
   } catch (err) {
     return next(err);
@@ -1683,10 +1727,14 @@ export const StudentMarkAnalysis = async (req, res, next) => {
 
     // Grade to points mapping
     const gradePoints = isCBC ? {
-      BE: 1,
-      ME: 2,
-      AE : 3,
-      EE : 4
+      BE2: 1,
+      BE1: 2,
+      ME2: 3,
+      ME1: 4,
+      AE2 : 5,
+      AE1 : 6,
+      EE2 : 7,
+      EE1 : 8
     } : {
       A: 12,
       "A-": 11,
@@ -1739,10 +1787,14 @@ export const StudentMarkAnalysis = async (req, res, next) => {
           name: streamName,
           enrolment: enrolment,
           grades: isCBC ? {
-            BE : 0,
-            AE : 0,
-            ME : 0,
-            EE : 0
+            BE2 : 0,
+            BE1 : 0,
+            AE2 : 0,
+            AE1 : 0,
+            ME2 : 0,
+            ME1 : 0,
+            EE2 : 0,
+            EE1 : 0
           } : {
             A: 0,
             "A-": 0,
@@ -1824,7 +1876,7 @@ export const StudentMarkAnalysis = async (req, res, next) => {
 export const StudentMarkListReady = async (req, res, next) => {
   try {
     const markList = await StudentMarkList(req);
-    console.log(markList)
+    // console.log(markList.formattedStudents);
     res.status(200).json(markList.formattedStudents);
   } catch (err) {
     next(err);
@@ -1852,7 +1904,7 @@ export const StudentAttemptedExams = async (req, res, next) => {
       
       -- exam1 is always included
       SELECT exam_name, year, 'exam1' AS source_table
-      FROM form_1_exams
+      FROM exams
       WHERE year BETWEEN
         (SELECT year_of_enrolment FROM student_info)
         AND EXTRACT(YEAR FROM CURRENT_DATE)
@@ -1861,7 +1913,7 @@ export const StudentAttemptedExams = async (req, res, next) => {
 
       -- include exam2 if form ≥ 2
       SELECT exam_name, year, 'exam2' AS source_table
-      FROM form_2_exams
+      FROM exams
       WHERE (SELECT current_form FROM student_info) >= 2
         AND year BETWEEN
           (SELECT year_of_enrolment FROM student_info)

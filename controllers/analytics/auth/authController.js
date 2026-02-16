@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt'
+import { centralPool, initTenantPool } from "../../../config/db_connection.js";
 import pool from '../../../config/db_connection.js'
 import jwt from 'jsonwebtoken'
 import {v4 as uuidv4} from "uuid"
@@ -6,6 +7,8 @@ import {validationResult} from "express-validator"
 import { createError } from '../../../utils/ErrorHandler.js'
 import loginLimiter from '../../../utils/rateLimiter.js'
 import {sendBulkSMS} from "../sms/standardSMSController.js"
+import { extractTenantFromEmail } from "../../../utils/extractTenantFromEmail.js";
+
 
 // Register User Controller
 import { createUserAccount } from "./userService.js";
@@ -34,6 +37,139 @@ export const registerUser = async (req, res, next) => {
 
 
 // User Login Controller
+// export const userLogin = async (req, res, next) => {
+//   const errors = validationResult(req);
+//   if (!errors.isEmpty()) {
+//     return next(createError(422, { errors: errors.array() }));
+//   }
+
+//   const ip = req.ip;
+//   const userAgent = req.get("User-Agent") || "unknown";
+//   const { username, password } = req.body;
+
+//   try {
+//     await loginLimiter.consume(ip);
+
+//     const newTokenVersion = uuidv4();
+
+//     const { rows } = await pool.query(
+//       `UPDATE users
+//        SET token_version = $1
+//        WHERE username = $2
+//        RETURNING id, user_id, username, password, role, is_active, token_version`,
+//       [newTokenVersion, username]
+//     );
+
+//     if (rows.length === 0) {
+//       await bcrypt.compare(
+//         password,
+//         "$2a$10$fakehashfor.timing.attack.prevention"
+//       );
+//       return next(createError(401, "Invalid credentials"));
+//     }
+
+//     const user = rows[0];
+
+//     if (!user.is_active) {
+//       return next(createError(403, "Account is disabled"));
+//     }
+
+//     const isPasswordCorrect = await bcrypt.compare(password, user.password);
+//     if (!isPasswordCorrect) {
+//       return next(createError(401, "Invalid credentials"));
+//     }
+
+//     const accessJti = uuidv4();
+//     const refreshJti = uuidv4();
+
+//     const accessToken = jwt.sign(
+//       {
+//         user: {
+//           id: user.id,
+//           user_id: user.user_id,
+//           username: user.username,
+//           role: user.role,
+//         },
+//         jti: accessJti,
+//       },
+//       process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
+//       {
+//         expiresIn: "15m",
+//         issuer: process.env.BACKEND_BASE_URL,
+//         audience: process.env.FRONTEND_BASE_URL,
+//       }
+//     );
+
+//     const refreshToken = jwt.sign(
+//       {
+//         user: {
+//           id: user.id,
+//           user_id: user.user_id,
+//         },
+//         tokenVersion: newTokenVersion,
+//         jti: refreshJti,
+//       },
+//       process.env.JWT_REFRESH_TOKEN_SECRET_KEY,
+//       {
+//         expiresIn: "7d",
+//         issuer: process.env.BACKEND_BASE_URL,
+//         audience: process.env.FRONTEND_BASE_URL,
+//       }
+//     );
+
+//     const tokenId = refreshJti; // Use the refresh jti as token_id
+//     await pool.query(
+//       `INSERT INTO refresh_tokens
+//        (token_id, user_id, token, user_agent, ip_address, expires_at)
+//        VALUES ($1, $2, $3, $4, $5, NOW() + interval '7 days')`,
+//       [tokenId, user.id, await bcrypt.hash(refreshToken, 12), userAgent, ip]
+//     );
+
+//     const csrfToken = uuidv4();
+
+//     // Set cookies
+//     res.cookie("access_token", accessToken, {
+//       httpOnly: true,
+//       secure: process.env.NODE_ENV === "production",
+//       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+//       path: "/",
+//       maxAge: 15 * 60 * 1000, // ✅ 15 minutes
+//     });
+
+//     res.cookie("refresh_token", refreshToken, {
+//       httpOnly: true,
+//       secure: process.env.NODE_ENV === "production",
+//       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+//       path: "/",
+//       maxAge: 7 * 24 * 60 * 60 * 1000, // ✅ 7 days
+//     });
+
+//     res.cookie("XSRF-TOKEN", csrfToken, {
+//       httpOnly: false,
+//       secure: process.env.NODE_ENV === "production",
+//       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+//       path: "/",
+//       maxAge: 15 * 60 * 1000,
+//     });
+
+//     res.status(200).json({
+//       user: {
+//         id: user.id,
+//         user_id: user.user_id,
+//         username: user.username,
+//         role: user.role,
+//       },
+//       csrf_token: csrfToken,
+//     });
+//   } catch (err) {
+//     if (err instanceof Error && err.msBeforeNext) {
+//       res.set("Retry-After", Math.ceil(err.msBeforeNext / 1000).toString());
+//       return next(createError(429, "Too many requests"));
+//     }
+//     return next(createError(500, "Authentication failed"));
+//   }
+// };
+
 export const userLogin = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -45,64 +181,126 @@ export const userLogin = async (req, res, next) => {
   const { username, password } = req.body;
 
   try {
+    // Rate limiter
     await loginLimiter.consume(ip);
 
-    const newTokenVersion = uuidv4();
+    // Extract tenant key from email
+    const tenantKey = extractTenantFromEmail(username);
 
-    const { rows } = await pool.query(
-      `UPDATE users
+    let user = null;
+    let level = null;
+    let role = null;
+    let tenantDbPool = null;
+
+    // -------------------------
+    // Super Admin Login
+    // -------------------------
+    if (tenantKey === "admin") {
+      const result = await centralPool.query(
+        "SELECT * FROM admins WHERE email = $1",
+        [username],
+      );
+
+      const admin = result.rows[0];
+      if (!admin) {
+        await bcrypt.compare(
+          password,
+          "$2a$10$fakehashfor.timing.attack.prevention",
+        );
+        return next(createError(401, "Invalid credentials"));
+      }
+
+      const valid = await bcrypt.compare(password, admin.password);
+      if (!valid) return next(createError(401, "Invalid credentials"));
+
+      // Set role & level
+      user = {
+        id: admin.id,
+        user_id: admin.id,
+        username: admin.email,
+        role: "sudo",
+      };
+      level = "sudo";
+      role = "sudo";
+    } else {
+      // -------------------------
+      // Tenant Login
+      // -------------------------
+      const tenantResult = await centralPool.query(
+        "SELECT * FROM tenants WHERE schema_name = $1",
+        [tenantKey],
+      );
+
+      const tenant = tenantResult.rows[0];
+      if (!tenant) return next(createError(404, "Tenant not found"));
+
+      // Connect to tenant DB
+      tenantDbPool = initTenantPool(tenant);
+
+      const newTokenVersion = uuidv4();
+
+      const userResult = await tenantDbPool.query(
+        `UPDATE users
        SET token_version = $1
        WHERE username = $2
        RETURNING id, user_id, username, password, role, is_active, token_version`,
-      [newTokenVersion, username]
-    );
-
-    if (rows.length === 0) {
-      await bcrypt.compare(
-        password,
-        "$2a$10$fakehashfor.timing.attack.prevention"
+        [newTokenVersion, username],
       );
-      return next(createError(401, "Invalid credentials"));
+
+      // const userResult = await tenantDbPool.query(
+      //   "SELECT * FROM users WHERE email = $1",
+      //   [username]
+      // )
+
+      const tenantUser = userResult.rows[0];
+      if (!tenantUser) {
+        await bcrypt.compare(
+          password,
+          "$2a$10$fakehashfor.timing.attack.prevention",
+        );
+        return next(createError(401, "Invalid credentials"));
+      }
+
+      const valid = await bcrypt.compare(password, tenantUser.password);
+      if (!valid) return next(createError(401, "Invalid credentials"));
+      if (!tenantUser.is_active)
+        return next(createError(403, "Account is disabled"));
+
+      // Set role & level
+      user = {
+        id: tenantUser.id,
+        user_id: tenantUser.user_id,
+        username: tenantUser.email,
+        role: tenantUser.role,
+      };
+      level = "tenant";
+      role = tenantUser.role;
     }
 
-    const user = rows[0];
-
-    if (!user.is_active) {
-      return next(createError(403, "Account is disabled"));
-    }
-
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
-    if (!isPasswordCorrect) {
-      return next(createError(401, "Invalid credentials"));
-    }
-
+    // -------------------------
+    // Generate tokens
+    // -------------------------
+    const newTokenVersion = uuidv4();
     const accessJti = uuidv4();
     const refreshJti = uuidv4();
 
     const accessToken = jwt.sign(
       {
-        user: {
-          id: user.id,
-          user_id: user.user_id,
-          username: user.username,
-          role: user.role,
-        },
+        user: user,
         jti: accessJti,
+        level,
       },
       process.env.JWT_ACCESS_TOKEN_SECRET_KEY,
       {
         expiresIn: "15m",
         issuer: process.env.BACKEND_BASE_URL,
         audience: process.env.FRONTEND_BASE_URL,
-      }
+      },
     );
 
     const refreshToken = jwt.sign(
       {
-        user: {
-          id: user.id,
-          user_id: user.user_id,
-        },
+        user: { id: user.id, user_id: user.user_id },
         tokenVersion: newTokenVersion,
         jti: refreshJti,
       },
@@ -111,26 +309,29 @@ export const userLogin = async (req, res, next) => {
         expiresIn: "7d",
         issuer: process.env.BACKEND_BASE_URL,
         audience: process.env.FRONTEND_BASE_URL,
-      }
+      },
     );
 
-    const tokenId = refreshJti; // Use the refresh jti as token_id
-    await pool.query(
+    // Store refresh token in the appropriate DB
+    const tokenPool = tenantKey === "admin" ? centralPool : tenantDbPool;
+    await tokenPool.query(
       `INSERT INTO refresh_tokens
        (token_id, user_id, token, user_agent, ip_address, expires_at)
        VALUES ($1, $2, $3, $4, $5, NOW() + interval '7 days')`,
-      [tokenId, user.id, await bcrypt.hash(refreshToken, 12), userAgent, ip]
+      [refreshJti, user.id, await bcrypt.hash(refreshToken, 12), userAgent, ip],
     );
 
     const csrfToken = uuidv4();
 
+    // -------------------------
     // Set cookies
+    // -------------------------
     res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       path: "/",
-      maxAge: 15 * 60 * 1000, // ✅ 15 minutes
+      maxAge: 15 * 60 * 1000,
     });
 
     res.cookie("refresh_token", refreshToken, {
@@ -138,7 +339,7 @@ export const userLogin = async (req, res, next) => {
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // ✅ 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.cookie("XSRF-TOKEN", csrfToken, {
@@ -149,12 +350,16 @@ export const userLogin = async (req, res, next) => {
       maxAge: 15 * 60 * 1000,
     });
 
+    // -------------------------
+    // Send response
+    // -------------------------
     res.status(200).json({
       user: {
         id: user.id,
         user_id: user.user_id,
         username: user.username,
         role: user.role,
+        level,
       },
       csrf_token: csrfToken,
     });
@@ -163,6 +368,7 @@ export const userLogin = async (req, res, next) => {
       res.set("Retry-After", Math.ceil(err.msBeforeNext / 1000).toString());
       return next(createError(429, "Too many requests"));
     }
+    console.error("Login error:", err);
     return next(createError(500, "Authentication failed"));
   }
 };
@@ -272,17 +478,32 @@ export const refreshAccessToken = async (req, res, next) => {
 // Get LoggedIn user
 export const getLoggedInUser = async (req, res, next) => {
   try {
-    const userId = req.user?.user?.id; // Comes from decoded JWT payload
+    const userId = req.user?.user?.id;
+    const userRole = req.user?.user?.role;
+    const userLevel = req.user?.level;
 
     if (!userId) {
       return next(createError(401, "Unauthorized access"));
     }
 
+    // Sudo User (ADMIN)
+    if (userLevel === "sudo") {
+      return res.status(200).json({
+        id: userId,
+        user_id: userId,
+        username: req.user?.user?.username || "admin",
+        role: userRole,
+        is_active: true,
+        created_at: null,
+      });
+    }
+
+    // Tenant User
     const { rows } = await pool.query(
-      `SELECT id, user_id, username, role, is_active, created_at 
-       FROM users 
+      `SELECT id, user_id, username, role, is_active, created_at
+       FROM users
        WHERE id = $1`,
-      [userId]
+      [userId],
     );
 
     if (rows.length === 0) {
@@ -295,7 +516,7 @@ export const getLoggedInUser = async (req, res, next) => {
       return next(createError(403, "Account is disabled"));
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       id: user.id,
       user_id: user.user_id,
       username: user.username,
@@ -304,8 +525,7 @@ export const getLoggedInUser = async (req, res, next) => {
       created_at: user.created_at,
     });
   } catch (err) {
-    console.log(err)
-    next(createError(500, "Failed to fetch user info"));
+    return next(createError(500, "Failed to fetch user info"));
   }
 };
 

@@ -13,6 +13,7 @@ export const DashboardData = async (req, res, next) => {
   }
 
   const { role, id, isCBC = true } = req.body;
+  console.log(role, id, isCBC);
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
@@ -27,6 +28,7 @@ export const DashboardData = async (req, res, next) => {
         [currentYear]
       );
       const total_students = parseInt(studentRows[0].count, 10) || 0;
+      console.log(total_students);
 
       // 2. Teachers count
       const { rows: teacherRows } = await pool.query(
@@ -511,10 +513,14 @@ export const DashboardData = async (req, res, next) => {
       let total_exams = 0;
       const gradePoints = isCBC
         ? {
-            BE: 1,
-            AE: 2,
-            ME: 3,
-            EE: 4,
+            BE2: 1,
+            BE1: 2,
+            AE2: 3,
+            AE1: 4,
+            ME2: 5,
+            ME1: 6,
+            EE2: 7,
+            EE1: 8,
           }
         : {
             E: 1,
@@ -546,7 +552,7 @@ export const DashboardData = async (req, res, next) => {
       for (const form of forms) {
         // Query exams from the unified exams table (not form_x tables)
         const { rows: examRows } = await pool.query(
-          `SELECT exam_name, year FROM exams WHERE form = $1 AND year BETWEEN $2 AND $3 ORDER BY year`,
+          `SELECT id, exam_name, year FROM exams WHERE form = $1 AND year BETWEEN $2 AND $3 ORDER BY year`,
           [form, year_of_enrolment, currentYear]
         );
 
@@ -559,7 +565,7 @@ export const DashboardData = async (req, res, next) => {
               exams: {
                 exam_1: {
                   alias: exam.exam_name,
-                  name: exam.exam_name,
+                  name: exam.id,
                   outof: "100",
                 },
               },
@@ -590,7 +596,7 @@ export const DashboardData = async (req, res, next) => {
       let overal_position = null;
 
       const { rows: recentExamRows } = await pool.query(
-        `SELECT exam_name, year, form FROM exams
+        `SELECT id, exam_name, year, form FROM exams
          WHERE year = $1 AND form = $2
          ORDER BY created_at DESC LIMIT 1`,
         [currentYear, current_form]
@@ -606,7 +612,7 @@ export const DashboardData = async (req, res, next) => {
             exams: {
               exam_1: {
                 alias: recentExam.exam_name,
-                name: recentExam.exam_name,
+                name: recentExam.id,
                 outof: "100",
               },
             },
@@ -635,11 +641,15 @@ export const DashboardData = async (req, res, next) => {
         total_exams,
         performance_trend,
         latest_results,
+        form : current_form
       });
-    } else {
+    } else if (role === "sudo") {
+      return res.status(200).json({message : 'SUDO'})
+    }else{
       return next(createError(403, "Forbidden: Invalid role"));
     }
   } catch (err) {
+    console.log(err)
     console.error("DashboardData error:", err.message);
     next(err);
   }

@@ -23,6 +23,12 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
       }
     });
 
+    // Check if form is in system88 (forms 19, 20, 21, 22)
+    const system88 = [19, 20, 21, 22];
+    const isSystem88Form = system88.includes(
+      parseInt(response.examDetails.form)
+    );
+
     // Calculate how many students per page based on available space
     const studentsPerPage = Math.floor((doc.page.height - 200) / 20);
 
@@ -113,17 +119,37 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
       const snColWidth = 30;
       const admColWidth = 50;
       const nameColWidth = 120;
-      const headers = [
-        "S/N",
-        "Adm. No",
-        "Name",
-        ...(response.subjectHeaders || []),
-      ];
+
+      // Determine which headers to show based on form type
+      let headers = ["S/N", "Adm. No", "Name"];
+
+      if (isSystem88Form) {
+        // For system88 forms, show all subject headers including 'Mrks', 'Pts', 'Grd', 'S.Rk', 'O.Rk'
+        headers = [...headers, ...(response.subjectHeaders || [])];
+      } else {
+        // For non-system88 forms, filter out specific columns and rename 'Grd' to 'PL'
+        const filteredHeaders = (response.subjectHeaders || [])
+          .map((header) => {
+            if (header === "Grd") {
+              return "PL"; // Rename Grd to PL
+            }
+            return header;
+          })
+          .filter(
+            (header) =>
+              // Remove 'Mrks', 'Pts', 'S.Rk', 'O.Rk' columns
+              !["Mrks", "Pts", "S.Rk", "O.Rk"].includes(header)
+          );
+
+        headers = [...headers, ...filteredHeaders];
+      }
+
       const remainingWidth =
         pageWidth - 40 - snColWidth - admColWidth - nameColWidth;
-      const subjectColWidth = response.subjectHeaders?.length
-        ? remainingWidth / response.subjectHeaders.length
-        : 0;
+      const subjectColWidth =
+        (response.subjectHeaders?.length || 0) > 0
+          ? remainingWidth / headers.slice(3).length
+          : 0;
 
       doc.strokeColor("#808080");
       doc.font("Times-Bold").fontSize(10);
@@ -219,26 +245,51 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
         x += nameColWidth;
 
         // Subjects and other columns
-        response.subjectHeaders.forEach((header) => {
+        const displayedHeaders = isSystem88Form
+          ? response.subjectHeaders || []
+          : (response.subjectHeaders || [])
+              .map((header) => {
+                if (header === "Grd") return "PL";
+                return header;
+              })
+              .filter(
+                (header) => !["Mrks", "Pts", "S.Rk", "O.Rk"].includes(header)
+              );
+
+        displayedHeaders.forEach((header) => {
           doc
             .moveTo(x, y)
             .lineTo(x, y + rowHeight)
             .stroke();
 
           let value = "";
-          if (header === "Mrks") {
-            value = student.marks?.toString() || "";
-          } else if (header === "Pts") {
-            value = student.points?.toString() || "";
-          } else if (header === "Grd") {
+          if (header === "PL") {
+            // For PL column (renamed from Grd)
             value = student.grade?.toString() || "";
-          } else if (header === "S.Rk") {
-            value = student.stream_rank?.toString() || "";
-          } else if (header === "O.Rk") {
-            value = student.overal_rank?.toString() || "";
+          } else if (isSystem88Form) {
+            // For system88 forms, show all values
+            if (header === "Mrks") {
+              value = student.marks?.toString() || "";
+            } else if (header === "Pts") {
+              value = student.points?.toString() || "";
+            } else if (header === "Grd") {
+              value = student.grade?.toString() || "";
+            } else if (header === "S.Rk") {
+              value = student.stream_rank?.toString() || "";
+            } else if (header === "O.Rk") {
+              value = student.overal_rank?.toString() || "";
+            } else {
+              // It's a subject
+              value = student.subjects?.[header]?.toString() || "";
+            }
           } else {
-            // It's a subject
-            value = student.subjects?.[header]?.toString() || "";
+            // For non-system88 forms, only show subject values and PL (grade)
+            if (header === "PL") {
+              value = student.grade?.toString() || "";
+            } else {
+              // It's a subject
+              value = student.subjects?.[header]?.toString() || "";
+            }
           }
 
           doc.text(value, x + 5, y + 5, {

@@ -111,10 +111,14 @@ export const gradingScale = async (req, res, next) => {
       };
     } else {
       gradingScale = {
-        BE: { min: record.be0, max: record.be1 },
-        AE: { min: record.ae0, max: record.ae1 },
-        ME: { min: record.me0, max: record.me1 },
-        EE: { min: record.ee0, max: record.ee1 },
+        BE2: { min: record.be20, max: record.be21 },
+        BE1: { min: record.be10, max: record.be11 },
+        AE2: { min: record.ae20, max: record.ae21 },
+        AE1: { min: record.ae10, max: record.ae11 },
+        ME2: { min: record.me20, max: record.me21 },
+        ME1: { min: record.me10, max: record.me11 },
+        EE2: { min: record.ee20, max: record.ee21 },
+        EE1: { min: record.ee10, max: record.ee11 },
       };
     }
 
@@ -202,9 +206,9 @@ export const allGradingScales = async (req, res, next) => {
       SELECT g.*, s.name 
       FROM "${gradingTable}" g
       JOIN "${subjectsTable}" s ON g.subject_id = s.id
-      WHERE g.subject_id = ANY($1) AND s.level = $2
+      WHERE g.subject_id = ANY($1) AND s.level = $2 AND g.exam_id = $3
       `,
-      [subjectIds, form]
+      [subjectIds, sanitizedForm, sanitizedExamName]
     );
 
     if (gradingResult.rowCount === 0) {
@@ -239,10 +243,14 @@ export const allGradingScales = async (req, res, next) => {
       formattedResults = gradingResult.rows.map((record) => ({
         id: record.subject_id,
         subject: record.name,
-        BE: { min: record.be0, max: record.be1 },
-        AE: { min: record.ae0, max: record.ae1 },
-        ME: { min: record.me0, max: record.me1 },
-        EE: { min: record.ee0, max: record.ee1 },
+        BE2: { min: record.be20, max: record.be21 },
+        BE1: { min: record.be10, max: record.be11 },
+        AE2: { min: record.ae20, max: record.ae21 },
+        AE1: { min: record.ae10, max: record.ae11 },
+        ME2: { min: record.me20, max: record.me21 },
+        ME1: { min: record.me10, max: record.me11 },
+        EE2: { min: record.ee20, max: record.ee21 },
+        EE1: { min: record.ee10, max: record.ee11 },
       }));
     }
 
@@ -339,7 +347,7 @@ export const updateGrading = async (req, res, next) => {
           createError(
             422,
             `Invalid ${
-              TEN_PARTITIONS_FORMS.includes(parsedForm) ? "E Mark" : "BE Score"
+              TEN_PARTITIONS_FORMS.includes(parsedForm) ? "E Mark" : "BE2 Score"
             } Max range value. Must be between 0 and ${maxAllowedE1}.`
           )
         );
@@ -383,52 +391,72 @@ export const updateGrading = async (req, res, next) => {
         );
       }
     } else {
-      // 10. NON-TEN forms (CBC-like) — user sets be1 (we use e_1 as be1), be0 is 0
-      const be0 = 0;
-      const be1 = parsedE1;
+      // 10. NON-TEN forms (CBC-like)
 
-      if (be1 < 0 || be1 >= MAX_VALUE) {
+      // Base BE
+      updates.be20 = 0;
+      updates.be21 = parsedE1;
+
+      if (parsedE1 < 0 || parsedE1 >= MAX_VALUE) {
         await client.query("ROLLBACK");
         return next(
-          createError(
-            422,
-            "Score upper bound must be between 0 and 99 (cannot be 100)."
-          )
+          createError(422, "Score upper bound must be between 0 and 99.")
         );
       }
 
-      updates.be0 = be0;
-      updates.be1 = be1;
+      let start = parsedE1 + 1;
 
-      // Remaining marks to split equally into AE, ME, EE
-      const remaining = MAX_VALUE - be1;
-      const baseSize = Math.floor(remaining / 3); // A: remainder goes to EE (Option A)
-      let start = be1 + 1;
+      // BE10–BE11 (next 10 marks)
+      updates.be10 = start;
+      updates.be11 = Math.min(start + 9, MAX_VALUE);
+      start = updates.be11 + 1;
 
-      // AE
-      updates.ae0 = start;
-      updates.ae1 = start + baseSize - 1;
-      start = updates.ae1 + 1;
+      // AE20–AE21
+      updates.ae20 = start;
+      updates.ae21 = Math.min(start + 9, MAX_VALUE);
+      start = updates.ae21 + 1;
 
-      // ME
-      updates.me0 = start;
-      updates.me1 = start + baseSize - 1;
-      start = updates.me1 + 1;
+      // AE10–AE11
+      updates.ae10 = start;
+      updates.ae11 = Math.min(start + 9, MAX_VALUE);
+      start = updates.ae11 + 1;
 
-      // EE gets the remainder up to MAX_VALUE
-      updates.ee0 = start;
-      updates.ee1 = MAX_VALUE;
+      // ME20–ME21
+      updates.me20 = start;
+      updates.me21 = Math.min(start + 9, MAX_VALUE);
+      start = updates.me21 + 1;
 
-      // Handle edge cases where baseSize is 0 (e.g., be1 is close to 100)
-      if (updates.ae1 < updates.ae0) updates.ae1 = updates.ae0 - 1; // produce empty range if necessary
-      if (updates.me1 < updates.me0) updates.me1 = updates.me0 - 1;
+      // ME10–ME11
+      updates.me10 = start;
+      updates.me11 = Math.min(start + 9, MAX_VALUE);
+      start = updates.me11 + 1;
 
-      // final sanity: ee0 must be <= ee1 and ee1 == MAX_VALUE
-      if (updates.ee0 > updates.ee1 || updates.ee1 !== MAX_VALUE) {
-        await client.query("ROLLBACK");
-        return next(
-          createError(422, "Invalid partition distribution for BE/AE/ME/EE.")
-        );
+      // EE20–EE21
+      updates.ee20 = start;
+      updates.ee21 = Math.min(start + 9, MAX_VALUE);
+      start = updates.ee21 + 1;
+
+      // EE10–EE11 (exception: may end at 100)
+      updates.ee10 = start;
+      updates.ee11 = MAX_VALUE;
+
+      // Final sanity checks
+      const pairs = [
+        ["be20", "be21"],
+        ["be10", "be11"],
+        ["ae20", "ae21"],
+        ["ae10", "ae11"],
+        ["me20", "me21"],
+        ["me10", "me11"],
+        ["ee20", "ee21"],
+        ["ee10", "ee11"],
+      ];
+
+      for (const [low, high] of pairs) {
+        if (updates[low] > updates[high]) {
+          await client.query("ROLLBACK");
+          return next(createError(422, `Invalid grading range: ${low} > ${high}`));
+        }
       }
     }
 

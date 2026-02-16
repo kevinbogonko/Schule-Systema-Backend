@@ -37,6 +37,10 @@ import timetableRoute from "./Routes/timetable/timetableController.js"
 // AI
 import vectorRoute from "./Routes/ai/vectors/vectorRoute.js"
 import ingestionRoute from "./Routes/ai/ingestion/ingestionRoute.js";
+import curriculumRoute from "./Routes/ai/curriculum/curriculumRoute.js";
+
+// TENANT
+import tenantRoute from "./Routes/tenant/tenant.route.js"
 
 
 // Configure __dirname for ES modules
@@ -107,7 +111,10 @@ app.use("/api/system/", SystemLevelsRoute);
 // AI
 app.use("/api/vector", vectorRoute)
 app.use("/api/ingest", ingestionRoute)
+app.use("/api/curriculum", curriculumRoute)
 
+// TENANTS
+app.use("/api/tenant", tenantRoute);
 
 // Handle client-side routing
 // app.get('*', (req, res, next) => {
