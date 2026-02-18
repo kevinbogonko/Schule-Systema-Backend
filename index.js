@@ -116,6 +116,11 @@ app.use("/api/curriculum", curriculumRoute)
 // TENANTS
 app.use("/api/tenant", tenantRoute);
 
+// Test
+app.get("/api/test", (req, res) => {
+    res.json("Working out ...")
+})
+
 // Handle client-side routing
 // app.get('*', (req, res, next) => {
 //     if(req.path.startsWith('/api')){
