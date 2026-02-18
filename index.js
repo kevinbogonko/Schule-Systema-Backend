@@ -54,7 +54,7 @@ const app = express()
 dotenv.config()
 
 // Port
-const PORT = process.env.PORT || 5004
+const PORT = process.env.PORT || 5001
 
 // Middlewares
 app.use(
@@ -164,7 +164,7 @@ app.use((err, req, res, next) => {
 })
 
 // Port listening
-app.listen(PORT, () => {
+app.listen(PORT,'0.0.0.0', () => {
     console.log(
       `Server up and listening on http://localhost:${PORT}`
     );
