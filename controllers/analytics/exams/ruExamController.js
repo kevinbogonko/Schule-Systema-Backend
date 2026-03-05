@@ -837,11 +837,12 @@ export const ExamSubjectMarks = async (req, res, next) => {
     const isSelective = Number(subjectRes.rows[0].isselective) === 1;
 
     /* ----------------------------------------------------
-       3. If selective → get allowed student IDs
+       3. If selective → verify students exist and build filter
     ---------------------------------------------------- */
-    let selectiveStudentIds = null;
+    let selectiveFilter = "";
 
     if (isSelective) {
+      // Check if there are students selected for this subject
       const selectiveRes = await client.query(
         `
         SELECT student_id
@@ -850,13 +851,13 @@ export const ExamSubjectMarks = async (req, res, next) => {
         `,
       );
 
-      selectiveStudentIds = selectiveRes.rows.map((row) => row.student_id);
-
-      // No student selected for this subject
-      if (selectiveStudentIds.length === 0) {
+      if (selectiveRes.rows.length === 0) {
         await client.query("ROLLBACK");
         return next(createError(404, "No students selected for this subject"));
       }
+
+      // Use subquery for filtering instead of array parameter
+      selectiveFilter = `AND s.id IN (SELECT student_id FROM selectives WHERE "${sanitizedSubject}" = 1)`;
     }
 
     /* ----------------------------------------------------
@@ -903,14 +904,6 @@ export const ExamSubjectMarks = async (req, res, next) => {
     /* ----------------------------------------------------
        6. Get students from students table based on criteria
     ---------------------------------------------------- */
-    const params = [parsedForm];
-    let selectiveFilter = "";
-
-    if (isSelective) {
-      params.push(selectiveStudentIds);
-      selectiveFilter = `AND s.id = ANY($${params.length})`;
-    }
-
     // Get all eligible students from students table
     const studentsQuery = `
       SELECT s.id, s.fname, s.lname
@@ -920,7 +913,7 @@ export const ExamSubjectMarks = async (req, res, next) => {
       ORDER BY s.fname, s.lname
     `;
 
-    const studentsResult = await client.query(studentsQuery, params);
+    const studentsResult = await client.query(studentsQuery, [parsedForm]);
 
     if (studentsResult.rows.length === 0) {
       await client.query("ROLLBACK");
@@ -1016,10 +1009,10 @@ export const ExamSubjectMarks = async (req, res, next) => {
       ORDER BY s.fname, s.lname
     `;
 
-    const finalResult = await client.query(
-      finalSql,
-      params.concat(parsedExamId),
-    );
+    const finalResult = await client.query(finalSql, [
+      parsedForm,
+      parsedExamId,
+    ]);
 
     // Commit the transaction
     await client.query("COMMIT");
