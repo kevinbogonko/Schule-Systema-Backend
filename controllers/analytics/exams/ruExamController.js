@@ -3,14 +3,14 @@ import { createError } from "../../../utils/ErrorHandler.js";
 import { sanitizeStringVariables } from "../../../utils/sanitizeString.js";
 import { studentReportMarks } from "../reports/reportform/studentReport.js";
 import path from "path";
-import xlsx from "xlsx"
+import xlsx from "xlsx";
 
 // Get Results for All Students with a POST request
 export const getAllStudentsMarks = async (req, res, next) => {
   // Validate request content type first
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -47,7 +47,7 @@ export const getAllStudentsMarks = async (req, res, next) => {
     // Get active subjects first
     const subjectsTable = `subjects_form_${sanitizedForm}`;
     const activeSubjects = await pool.query(
-      `SELECT id FROM ${subjectsTable} WHERE status = 1`
+      `SELECT id FROM ${subjectsTable} WHERE status = 1`,
     );
 
     if (activeSubjects.rows.length === 0)
@@ -89,7 +89,7 @@ export const getAllStudentsMarks = async (req, res, next) => {
         student_id: row.id,
         student_name: row.name,
         marks: Object.fromEntries(
-          subjectIds.map((id) => [id, row[id] ?? null])
+          subjectIds.map((id) => [id, row[id] ?? null]),
         ),
       }));
 
@@ -108,8 +108,8 @@ export const getAllStudentsMarks = async (req, res, next) => {
       return next(
         createError(
           404,
-          "Exam or student data not found for the provided inputs"
-        )
+          "Exam or student data not found for the provided inputs",
+        ),
       );
     }
 
@@ -122,7 +122,7 @@ export const getStudentMarks = async (req, res, next) => {
   // Validate request content type first
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -137,7 +137,7 @@ export const getStudentMarks = async (req, res, next) => {
     // Validate student_id is numeric
     if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0)
       return next(
-        createError(400, "Invalid student ID: must be a positive integer")
+        createError(400, "Invalid student ID: must be a positive integer"),
       );
 
     // More strict sanitization
@@ -165,7 +165,7 @@ export const getStudentMarks = async (req, res, next) => {
     // Get active subjects first
     const subjectsTable = `subjects_form_${sanitizedForm}`;
     const activeSubjects = await pool.query(
-      `SELECT id FROM ${subjectsTable} WHERE status = 1`
+      `SELECT id FROM ${subjectsTable} WHERE status = 1`,
     );
 
     if (activeSubjects.rows.length === 0)
@@ -233,8 +233,8 @@ export const getStudentMarks = async (req, res, next) => {
       return next(
         createError(
           404,
-          "Exam or student data not found for the provided inputs"
-        )
+          "Exam or student data not found for the provided inputs",
+        ),
       );
     }
 
@@ -247,7 +247,7 @@ export const updateStudentMark = async (req, res, next) => {
   // Validate request content type first
   if (!req.is("application/json"))
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
 
   // Get parameters from request body
@@ -260,7 +260,7 @@ export const updateStudentMark = async (req, res, next) => {
     // Validate student_id is numeric
     if (!Number.isInteger(Number(student_id)) || Number(student_id) <= 0)
       return next(
-        createError(400, "Invalid student ID: must be a positive integer")
+        createError(400, "Invalid student ID: must be a positive integer"),
       );
 
     // More strict sanitization
@@ -297,8 +297,8 @@ export const updateStudentMark = async (req, res, next) => {
         next(
           createError(
             400,
-            `Mark for subject code ${key} must be between 0 and 99`
-          )
+            `Mark for subject code ${key} must be between 0 and 99`,
+          ),
         );
     }
 
@@ -346,7 +346,7 @@ export const updateStudentMark = async (req, res, next) => {
 export const updateAllStudentMark = async (req, res, next) => {
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -385,7 +385,7 @@ export const updateAllStudentMark = async (req, res, next) => {
         if (markKeys.length === 0) {
           throw createError(
             400,
-            `No marks provided for student ID: ${student_id}`
+            `No marks provided for student ID: ${student_id}`,
           );
         }
 
@@ -394,14 +394,14 @@ export const updateAllStudentMark = async (req, res, next) => {
           if (isNaN(val) || val === "") {
             throw createError(
               400,
-              `Invalid mark for student ${student_id}, column ${col}`
+              `Invalid mark for student ${student_id}, column ${col}`,
             );
           }
           const numericValue = parseFloat(val);
           if (numericValue < 0 || numericValue > 99) {
             throw createError(
               400,
-              `Mark for student ${student_id}, column ${col} must be between 0 and 99`
+              `Mark for student ${student_id}, column ${col} must be between 0 and 99`,
             );
           }
         }
@@ -422,7 +422,7 @@ export const updateAllStudentMark = async (req, res, next) => {
         if (updateResult.rowCount === 0) {
           throw createError(
             404,
-            `Student record not found for Reg No: ${student_id}`
+            `Student record not found for Reg No: ${student_id}`,
           );
         }
       }
@@ -451,7 +451,7 @@ export const examList = async (req, res, next) => {
     if (!req.is("application/json")) {
       throw createError(
         415,
-        "Unsupported Media Type: Expected application/json"
+        "Unsupported Media Type: Expected application/json",
       );
     }
 
@@ -460,7 +460,7 @@ export const examList = async (req, res, next) => {
     if (!form || !term || !year) {
       throw createError(
         400,
-        "Missing required parameters: form, term, and year are mandatory."
+        "Missing required parameters: form, term, and year are mandatory.",
       );
     }
 
@@ -476,7 +476,7 @@ export const examList = async (req, res, next) => {
     ) {
       throw createError(
         400,
-        "Invalid input: Only alphanumeric characters and underscores allowed."
+        "Invalid input: Only alphanumeric characters and underscores allowed.",
       );
     }
 
@@ -487,14 +487,17 @@ export const examList = async (req, res, next) => {
       ORDER BY id ASC;
     `;
 
-    const { rows } = await pool.query(query, [sanitizedYear, sanitizedTerm, sanitizedForm]);
+    const { rows } = await pool.query(query, [
+      sanitizedYear,
+      sanitizedTerm,
+      sanitizedForm,
+    ]);
 
     if (rows.length === 0) {
       throw createError(404, "No exams found for the provided year and term.");
     }
 
     return res.status(200).json(rows);
-    
   } catch (error) {
     return next(error);
   }
@@ -506,27 +509,19 @@ export const getexam = async (req, res, next) => {
     if (!req.is("application/json")) {
       throw createError(
         415,
-        "Unsupported Media Type: Expected application/json"
+        "Unsupported Media Type: Expected application/json",
       );
     }
 
     const { id } = req.body;
 
     if (!id) {
-      throw createError(
-        400,
-        "Missing required parameters!"
-      );
+      throw createError(400, "Missing required parameters!");
     }
 
     const inputPattern = /^[a-zA-Z0-9_]+$/;
-    if (
-      !inputPattern.test(id)
-    ) {
-      throw createError(
-        400,
-        "Invalid input!"
-      );
+    if (!inputPattern.test(id)) {
+      throw createError(400, "Invalid input!");
     }
 
     const query = `
@@ -543,7 +538,6 @@ export const getexam = async (req, res, next) => {
     }
 
     return res.status(200).json(rows[0]);
-    
   } catch (error) {
     return next(error);
   }
@@ -555,25 +549,19 @@ export const updateExam = async (req, res, next) => {
     if (!req.is("application/json")) {
       throw createError(
         415,
-        "Unsupported Media Type: Expected application/json"
+        "Unsupported Media Type: Expected application/json",
       );
     }
 
     const { id, exam_name, scheduled_at } = req.body;
 
     if (!id || !exam_name || !scheduled_at) {
-      throw createError(
-        400,
-        "Missing required parameters!"
-      );
+      throw createError(400, "Missing required parameters!");
     }
 
     const inputPattern = /^[a-zA-Z0-9_]+$/;
     if (!inputPattern.test(id)) {
-      throw createError(
-        400,
-        "Invalid input!"
-      );
+      throw createError(400, "Invalid input!");
     }
 
     // Check if exam exists
@@ -592,13 +580,16 @@ export const updateExam = async (req, res, next) => {
       RETURNING *;
     `;
 
-    const { rows } = await pool.query(updateQuery, [exam_name, scheduled_at, id]);
+    const { rows } = await pool.query(updateQuery, [
+      exam_name,
+      scheduled_at,
+      id,
+    ]);
 
     return res.status(200).json({
       message: "Exam updated successfully",
-      exam: rows[0]
+      exam: rows[0],
     });
-    
   } catch (error) {
     return next(error);
   }
@@ -610,25 +601,19 @@ export const deleteExam = async (req, res, next) => {
     if (!req.is("application/json")) {
       throw createError(
         415,
-        "Unsupported Media Type: Expected application/json"
+        "Unsupported Media Type: Expected application/json",
       );
     }
 
     const { id } = req.body;
 
     if (!id) {
-      throw createError(
-        400,
-        "Missing required parameter!"
-      );
+      throw createError(400, "Missing required parameter!");
     }
 
     const inputPattern = /^[a-zA-Z0-9_]+$/;
     if (!inputPattern.test(id)) {
-      throw createError(
-        400,
-        "Invalid input!"
-      );
+      throw createError(400, "Invalid input!");
     }
 
     // Check if exam exists
@@ -645,20 +630,18 @@ export const deleteExam = async (req, res, next) => {
 
     return res.status(200).json({
       message: "Exam deleted successfully",
-      deletedExam: rows[0]
+      deletedExam: rows[0],
     });
-    
   } catch (error) {
     return next(error);
   }
 };
 
-
 // CHECK AND RETURN ACTIVE SUBJECTS IN EXAM MARK TABLE
 export const subjectExistInExamTable = async (req, res, next) => {
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -699,23 +682,27 @@ export const subjectExistInExamTable = async (req, res, next) => {
       // 1. Check if examTermTable exists
       const examTableCheck = await client.query(
         `SELECT to_regclass($1) AS exists`,
-        [examTermTable]
+        [examTermTable],
       );
       if (!examTableCheck.rows[0].exists) {
         await client.query("ROLLBACK");
-        return next(
-          createError(404, `Exam table does not exist.`)
-        );
+        return next(createError(404, `Exam table does not exist.`));
       }
 
       // 2. Get active subjects - now selecting both id and name
       const subjectResult = await client.query(
-        `SELECT id::text, name FROM "${subjectsTable}" WHERE status = 1 AND level = $1`, [sanitizedForm]
+        `SELECT id::text, name FROM "${subjectsTable}" WHERE status = 1 AND level = $1`,
+        [sanitizedForm],
       );
 
       if (subjectResult.rows.length === 0) {
         await client.query("ROLLBACK");
-        return next(createError(404, `No active ${nonCBCForms.includes(sanitizedForm) ? "subjects" : "learning areas"} found.`));
+        return next(
+          createError(
+            404,
+            `No active ${nonCBCForms.includes(sanitizedForm) ? "subjects" : "learning areas"} found.`,
+          ),
+        );
       }
 
       const subjects = subjectResult.rows;
@@ -724,7 +711,7 @@ export const subjectExistInExamTable = async (req, res, next) => {
       const columnResult = await client.query(
         `SELECT column_name FROM information_schema.columns 
                  WHERE table_name = $1`,
-        [examTermTable.toLowerCase()]
+        [examTermTable.toLowerCase()],
       );
       const columnNames = columnResult.rows.map((row) => row.column_name);
 
@@ -738,7 +725,10 @@ export const subjectExistInExamTable = async (req, res, next) => {
       if (validSubjects.length === 0) {
         await client.query("ROLLBACK");
         return next(
-          createError(404, `No matching ${nonCBCForms.includes(sanitizedForm) ? "subjects" : "learning areas"} found in exam table.`)
+          createError(
+            404,
+            `No matching ${nonCBCForms.includes(sanitizedForm) ? "subjects" : "learning areas"} found in exam table.`,
+          ),
         );
       }
 
@@ -768,7 +758,7 @@ export const subjectExistInExamTable = async (req, res, next) => {
 export const ExamSubjectMarks = async (req, res, next) => {
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -778,7 +768,7 @@ export const ExamSubjectMarks = async (req, res, next) => {
 
   if (form === undefined || exam_id === undefined || subject === undefined) {
     return next(
-      createError(400, "Missing required parameters: form, exam_id, subject")
+      createError(400, "Missing required parameters: form, exam_id, subject"),
     );
   }
 
@@ -805,8 +795,30 @@ export const ExamSubjectMarks = async (req, res, next) => {
   try {
     client = await pool.connect();
 
+    // Start a transaction
+    await client.query("BEGIN");
+
     /* ----------------------------------------------------
-       1. Check if subject is selective
+       1. First, get exam details (year, term, exam_name) from examtypes table
+    ---------------------------------------------------- */
+    const examDetailsRes = await client.query(
+      `
+      SELECT year, term, exam_name
+      FROM exams
+      WHERE id = $1
+      `,
+      [parsedExamId],
+    );
+
+    if (examDetailsRes.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return next(createError(404, "Exam not found"));
+    }
+
+    const { year, term, exam_name: examName } = examDetailsRes.rows[0];
+
+    /* ----------------------------------------------------
+       2. Check if subject is selective
     ---------------------------------------------------- */
     const subjectRes = await client.query(
       `
@@ -814,17 +826,18 @@ export const ExamSubjectMarks = async (req, res, next) => {
       FROM subjects
       WHERE id = $1 AND level = $2
       `,
-      [sanitizedSubject, parsedForm]
+      [sanitizedSubject, parsedForm],
     );
 
     if (subjectRes.rowCount === 0) {
+      await client.query("ROLLBACK");
       return next(createError(404, "Subject not found"));
     }
 
     const isSelective = Number(subjectRes.rows[0].isselective) === 1;
 
     /* ----------------------------------------------------
-       2. If selective → get allowed student IDs
+       3. If selective → get allowed student IDs
     ---------------------------------------------------- */
     let selectiveStudentIds = null;
 
@@ -834,19 +847,20 @@ export const ExamSubjectMarks = async (req, res, next) => {
         SELECT student_id
         FROM selectives
         WHERE "${sanitizedSubject}" = 1
-        `
+        `,
       );
 
       selectiveStudentIds = selectiveRes.rows.map((row) => row.student_id);
 
       // No student selected for this subject
       if (selectiveStudentIds.length === 0) {
+        await client.query("ROLLBACK");
         return next(createError(404, "No students selected for this subject"));
       }
     }
 
     /* ----------------------------------------------------
-       3. Ensure subject column exists in exam table
+       4. Ensure subject column exists in exam table
     ---------------------------------------------------- */
     const mainColumnRes = await client.query(
       `
@@ -857,20 +871,21 @@ export const ExamSubjectMarks = async (req, res, next) => {
         AND column_name = $2
       ) AS exists
       `,
-      [examTermTable, sanitizedSubject]
+      [examTermTable, sanitizedSubject],
     );
 
     if (!mainColumnRes.rows[0].exists) {
+      await client.query("ROLLBACK");
       const label = nonCBCForms.includes(parsedForm)
         ? "Subject"
         : "Learning area";
       return next(
-        createError(404, `${label} column "${sanitizedSubject}" not found`)
+        createError(404, `${label} column "${sanitizedSubject}" not found`),
       );
     }
 
     /* ----------------------------------------------------
-       4. Get paper columns
+       5. Get paper columns
     ---------------------------------------------------- */
     const paperColumnsRes = await client.query(
       `
@@ -880,13 +895,105 @@ export const ExamSubjectMarks = async (req, res, next) => {
       AND column_name LIKE $2
       ORDER BY column_name
       `,
-      [examTermTable, `${sanitizedSubject}_%`]
+      [examTermTable, `${sanitizedSubject}_%`],
     );
 
     const paperColumns = paperColumnsRes.rows.map((r) => r.column_name);
 
     /* ----------------------------------------------------
-       5. Build SELECT columns
+       6. Get students from students table based on criteria
+    ---------------------------------------------------- */
+    const params = [parsedForm];
+    let selectiveFilter = "";
+
+    if (isSelective) {
+      params.push(selectiveStudentIds);
+      selectiveFilter = `AND s.id = ANY($${params.length})`;
+    }
+
+    // Get all eligible students from students table
+    const studentsQuery = `
+      SELECT s.id, s.fname, s.lname
+      FROM students s
+      WHERE s.current_form = $1
+      ${selectiveFilter}
+      ORDER BY s.fname, s.lname
+    `;
+
+    const studentsResult = await client.query(studentsQuery, params);
+
+    if (studentsResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return next(createError(404, "No students found for this form"));
+    }
+
+    /* ----------------------------------------------------
+       7. Get existing exam records for these students
+    ---------------------------------------------------- */
+    const studentIds = studentsResult.rows.map((row) => row.id);
+
+    const existingExamQuery = `
+      SELECT id
+      FROM "${examTermTable}"
+      WHERE exam_id = $1
+      AND id = ANY($2)
+    `;
+
+    const existingExamResult = await client.query(existingExamQuery, [
+      parsedExamId,
+      studentIds,
+    ]);
+    const existingStudentIds = new Set(
+      existingExamResult.rows.map((row) => row.id),
+    );
+
+    /* ----------------------------------------------------
+       8. Add missing students to exam table with all required fields
+    ---------------------------------------------------- */
+    const studentsToAdd = studentsResult.rows.filter(
+      (student) => !existingStudentIds.has(student.id),
+    );
+
+    if (studentsToAdd.length > 0) {
+      // Build insert query for missing students including all required fields
+      const insertValues = [];
+      const insertParams = [];
+      let paramIndex = 1;
+
+      studentsToAdd.forEach((student) => {
+        // Create uni_val as concatenation of exam_id and student id
+        const uniVal = `${parsedExamId}${student.id}`;
+
+        insertValues.push(
+          `($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7})`,
+        );
+        insertParams.push(
+          student.id, // id
+          parsedExamId, // exam_id
+          parsedForm, // form
+          year, // year
+          term, // term
+          examName, // exam_val
+          examName, // exam (exam name)
+          uniVal, // uni_val (exam_id + student id)
+        );
+        paramIndex += 8;
+      });
+
+      const insertQuery = `
+        INSERT INTO "${examTermTable}" 
+        (id, exam_id, form, year, term, exam_val, exam, uni_val)
+        VALUES ${insertValues.join(", ")}
+      `;
+
+      await client.query(insertQuery, insertParams);
+      console.log(
+        `Added ${studentsToAdd.length} students to exam table with all required fields`,
+      );
+    }
+
+    /* ----------------------------------------------------
+       9. Build SELECT columns for final query
     ---------------------------------------------------- */
     const selectColumns = [
       `m.id`,
@@ -897,36 +1004,30 @@ export const ExamSubjectMarks = async (req, res, next) => {
     ];
 
     /* ----------------------------------------------------
-       6. Build WHERE clause conditionally
+       10. Get final marks with all students included
     ---------------------------------------------------- */
-    const params = [parsedForm, parsedExamId];
-    let selectiveFilter = "";
-
-    if (isSelective) {
-      params.push(selectiveStudentIds);
-      selectiveFilter = `AND m.id = ANY($${params.length})`;
-    }
-
-    const sql = `
+    const finalSql = `
       SELECT ${selectColumns.join(", ")}
       FROM "${examTermTable}" AS m
-      JOIN students AS s ON m.id = s.id
+      INNER JOIN students AS s ON m.id = s.id
       WHERE s.current_form = $1
         AND m.exam_id = $2
         ${selectiveFilter}
       ORDER BY s.fname, s.lname
     `;
 
-    const result = await client.query(sql, params);
+    const finalResult = await client.query(
+      finalSql,
+      params.concat(parsedExamId),
+    );
 
-    if (result.rows.length === 0) {
-      return next(createError(404, "No student marks found for this subject"));
-    }
+    // Commit the transaction
+    await client.query("COMMIT");
 
     /* ----------------------------------------------------
-       7. Normalize output
+       11. Normalize output
     ---------------------------------------------------- */
-    const transformedResults = result.rows.map((row) => {
+    const transformedResults = finalResult.rows.map((row) => {
       const base = {
         id: row.id,
         fname: row.fname,
@@ -943,6 +1044,11 @@ export const ExamSubjectMarks = async (req, res, next) => {
 
     return res.status(200).json(transformedResults);
   } catch (err) {
+    // Rollback in case of error
+    if (client) {
+      await client.query("ROLLBACK");
+    }
+    console.log(err);
     return next(err);
   } finally {
     if (client) client.release();
@@ -953,7 +1059,7 @@ export const ExamSubjectMarks = async (req, res, next) => {
 export const allPaperSetup = async (req, res, next) => {
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -1031,7 +1137,7 @@ export const paperSetup = async (req, res, next) => {
   // 1. Ensure request is JSON
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -1044,7 +1150,7 @@ export const paperSetup = async (req, res, next) => {
   // 3. Validate required fields
   if (form === undefined || exam_id === undefined || subject === undefined) {
     return next(
-      createError(400, "Missing required parameters: form, exam_id, subject")
+      createError(400, "Missing required parameters: form, exam_id, subject"),
     );
   }
 
@@ -1118,7 +1224,7 @@ export const paperSetup = async (req, res, next) => {
 export const paperSetupUpdate = async (req, res, next) => {
   if (!req.is("application/json")) {
     return next(
-      createError(415, "Unsupported Media Type: Expected application/json")
+      createError(415, "Unsupported Media Type: Expected application/json"),
     );
   }
 
@@ -1130,13 +1236,13 @@ export const paperSetupUpdate = async (req, res, next) => {
     // Validate subject_id is numeric
     if (!Number.isInteger(Number(id)) || Number(id) <= 0)
       return next(
-        createError(400, "Invalid subject ID: must be a positive integer")
+        createError(400, "Invalid subject ID: must be a positive integer"),
       );
 
     // Validate subject_id is numeric
     if (!Number.isInteger(Number(exam_id)) || Number(exam_id) <= 0)
       return next(
-        createError(400, "Invalid EXAM ID: must be a positive integer")
+        createError(400, "Invalid EXAM ID: must be a positive integer"),
       );
 
     // // More strict sanitization
@@ -1262,8 +1368,8 @@ export const procesMarks = async (req, res, next) => {
       return next(
         createError(
           400,
-          "Insufficient active subjects in one or more required groups"
-        )
+          "Insufficient active subjects in one or more required groups",
+        ),
       );
     }
 
@@ -1273,7 +1379,7 @@ export const procesMarks = async (req, res, next) => {
 
     if (gradingResult.rows.length === 0) {
       return next(
-        createError(404, "No grading criteria found for active subjects")
+        createError(404, "No grading criteria found for active subjects"),
       );
     }
 
@@ -1379,7 +1485,7 @@ export const procesMarks = async (req, res, next) => {
         if (record[subjectId] !== undefined) {
           const { grade, points } = getGradeAndPoints(
             record[subjectId],
-            subjectId
+            subjectId,
           );
           // Use subject initial instead of ID
           result.subjects[subjectInitialsMap[subjectId]] = grade;
@@ -1402,7 +1508,7 @@ export const procesMarks = async (req, res, next) => {
           if (record[subjectId] !== undefined) {
             const { grade, points } = getGradeAndPoints(
               record[subjectId],
-              subjectId
+              subjectId,
             );
             group1Marks += record[subjectId] || 0;
             group1Points += points;
@@ -1508,13 +1614,12 @@ export const procesMarks = async (req, res, next) => {
 
 // Process Marksheet
 export const procesMarkSheet = async (req, res, next) => {
-  const { exam, form, stream } = req.body;
+  const { exam, form, stream, term, year } = req.body;
 
   try {
-
-    if(!exam) return next(createError(400, "Invalid exam provided"));
-    if(!form) return next(createError(400, "Invalid form provided"));
-    if(!stream) return next(createError(400, "Invalid stream provided"));
+    if (!exam) return next(createError(400, "Invalid exam provided"));
+    if (!form) return next(createError(400, "Invalid form provided"));
+    if (!stream) return next(createError(400, "Invalid stream provided"));
 
     // if (!exam || !form || !stream) {
     //   return next(createError(400, "Invalid exam or form provided"));
@@ -1598,15 +1703,18 @@ export const procesMarkSheet = async (req, res, next) => {
 
     // Prepare final payload
     const response = {
+      exam,
+      form,
+      term,
+      year,
       schoolDetails,
       studentData,
       subjectHeaders: Object.values(subjectInitialsMap),
     };
 
-    // console.log(response)
     return response;
   } catch (error) {
-    console.log(error)
+    console.log(error);
     next(error);
   }
 };
@@ -1614,8 +1722,9 @@ export const procesMarkSheet = async (req, res, next) => {
 // Process Mark for ALL FORM AND STREAM // THIS IS RETURNING DATA
 export const StudentMarkList = async (req, res, next) => {
   try {
-    const studentMarkResult = await studentReportMarks(req)
+    const studentMarkResult = await studentReportMarks(req);
     const dataToFormat = studentMarkResult.studentResults;
+    const examInformation = studentMarkResult.examDetails;
 
     if (!dataToFormat || !Array.isArray(dataToFormat)) {
       return res.status(404).json({ message: "No student data found." });
@@ -1624,6 +1733,12 @@ export const StudentMarkList = async (req, res, next) => {
     // Determine the form from first student
     const form = dataToFormat[0]?.form;
     if (!form) throw createError(400, "Form not found in student data.");
+
+    // Get exam name
+    const examnameQuery = "SELECT exam_name FROM exams WHERE id = $1"
+    const examnameResult = await pool.query(examnameQuery, [
+      examInformation?.examname,
+    ]);
 
     // Step 1: Get school details including logo path
     const particularsQuery = "SELECT * FROM particulars WHERE id = 119";
@@ -1645,6 +1760,7 @@ export const StudentMarkList = async (req, res, next) => {
     // Fetch subjects for the form
     const query = `SELECT id, init FROM subjects WHERE status = 1 AND level = $1`;
     const { rows: subjectRows } = await pool.query(query, [form]);
+    // console.log(subjectRows)
 
     // Create a map of subject_id -> init
     const subjectMap = {};
@@ -1683,7 +1799,8 @@ export const StudentMarkList = async (req, res, next) => {
     });
 
     const response = {
-      examDetails : studentMarkResult.examDetails,
+      exam_name: examnameResult.rows[0]?.exam_name,
+      examDetails: studentMarkResult.examDetails,
       schoolDetails,
       formattedStudents,
       subjectHeaders: [
@@ -1702,53 +1819,57 @@ export const StudentMarkList = async (req, res, next) => {
   }
 };
 
-// Send to front end processed DATA above // USE THIS FOR FRONTEND
+// Send to front end processed DATA above // USE THIS FOR MARK ANALYSIS REPORT PDF
 export const StudentMarkAnalysis = async (req, res, next) => {
   try {
-    const {form} = req.body
+    const { form } = req.body;
     // Get the raw mark list data
     const markList = await StudentMarkList(req);
 
-    // Get active subjects from database
+    // Get active subjects from database including isselective flag
     const activeSubjects = await pool.query(
-      `SELECT id, name, init FROM subjects WHERE status = 1 AND level = $1`, [form]
+      `SELECT id, name, init, isselective FROM subjects WHERE status = 1 AND level = $1`,
+      [form],
     );
 
-    // Create a map of subject initials to full names
+    // Create a map of subject initials to full names and selective status
     const subjectMap = {};
     activeSubjects.rows.forEach((subject) => {
       subjectMap[subject.init] = {
         name: subject.name,
         id: subject.id,
+        isselective: subject.isselective === 1, // Convert to boolean
       };
     });
 
-    const isCBC = ![19, 20, 21, 22].includes(form)
+    const isNotCBC = [19, 20, 21, 22].includes(Number(form));
 
     // Grade to points mapping
-    const gradePoints = isCBC ? {
-      BE2: 1,
-      BE1: 2,
-      ME2: 3,
-      ME1: 4,
-      AE2 : 5,
-      AE1 : 6,
-      EE2 : 7,
-      EE1 : 8
-    } : {
-      A: 12,
-      "A-": 11,
-      "B+": 10,
-      B: 9,
-      "B-": 8,
-      "C+": 7,
-      C: 6,
-      "C-": 5,
-      "D+": 4,
-      D: 3,
-      "D-": 2,
-      E: 1,
-    };
+    const gradePoints = isNotCBC
+      ? {
+          A: 12,
+          "A-": 11,
+          "B+": 10,
+          B: 9,
+          "B-": 8,
+          "C+": 7,
+          C: 6,
+          "C-": 5,
+          "D+": 4,
+          D: 3,
+          "D-": 2,
+          E: 1,
+        }
+      : {
+          BE2: 1,
+          BE1: 2,
+          ME2: 3,
+          ME1: 4,
+          AE2: 5,
+          AE1: 6,
+          EE2: 7,
+          EE1: 8,
+        };
 
     // Group students by stream
     const streams = {};
@@ -1766,12 +1887,13 @@ export const StudentMarkAnalysis = async (req, res, next) => {
     activeSubjects.rows.forEach((subject) => {
       const subjectCode = subject.init;
       const subjectName = subject.name;
+      const isSelective = subject.isselective === 1;
 
       const subjectData = {
         code: subject.id.toString(),
         name: subjectName,
         init: subjectCode,
-        optional: false, // You may need to adjust this based on your data
+        optional: isSelective, // Mark as optional if it's selective
         instructor: "To be assigned", // You can modify this as needed
         streams: [],
         overallAvg: 0,
@@ -1781,51 +1903,72 @@ export const StudentMarkAnalysis = async (req, res, next) => {
       // Process each stream for this subject
       Object.keys(streams).forEach((streamName) => {
         const streamStudents = streams[streamName];
-        const enrolment = streamStudents.length;
+
+        // For selective subjects, only count students taking this subject
+        // For non-selective subjects, count all students in the stream
+        let studentsInSubject;
+        let enrolment;
+
+        if (isSelective) {
+          // Filter students who are taking this selective subject
+          studentsInSubject = streamStudents.filter(
+            (student) => student.subjects && student.subjects[subjectCode],
+          );
+          enrolment = studentsInSubject.length;
+        } else {
+          // All students in stream take this subject
+          studentsInSubject = streamStudents;
+          enrolment = streamStudents.length;
+        }
 
         const streamData = {
           name: streamName,
           enrolment: enrolment,
-          grades: isCBC ? {
-            BE2 : 0,
-            BE1 : 0,
-            AE2 : 0,
-            AE1 : 0,
-            ME2 : 0,
-            ME1 : 0,
-            EE2 : 0,
-            EE1 : 0
-          } : {
-            A: 0,
-            "A-": 0,
-            "B+": 0,
-            B: 0,
-            "B-": 0,
-            "C+": 0,
-            C: 0,
-            "C-": 0,
-            "D+": 0,
-            D: 0,
-            "D-": 0,
-            E: 0,
-          },
+          grades: isNotCBC
+            ? {
+                A: 12,
+                "A-": 11,
+                "B+": 10,
+                B: 9,
+                "B-": 8,
+                "C+": 7,
+                C: 6,
+                "C-": 5,
+                "D+": 4,
+                D: 3,
+                "D-": 2,
+                E: 1,
+              }
+            : {
+                BE2: 0,
+                BE1: 0,
+                AE2: 0,
+                AE1: 0,
+                ME2: 0,
+                ME1: 0,
+                EE2: 0,
+                EE1: 0,
+              },
           avgPoints: 0,
         };
 
         // Count grades for this subject in this stream
         let totalPoints = 0;
-        streamStudents.forEach((student) => {
+        studentsInSubject.forEach((student) => {
           if (student.subjects[subjectCode]) {
             const grade = student.subjects[subjectCode].split(" ")[1];
-            streamData.grades[grade]++;
-            totalPoints += gradePoints[grade];
+            if (gradePoints[grade]) {
+              // Check if grade exists in mapping
+              streamData.grades[grade]++;
+              totalPoints += gradePoints[grade];
+            }
           }
         });
 
         // Calculate average points for this stream
         if (enrolment > 0) {
           streamData.avgPoints = parseFloat(
-            (totalPoints / enrolment).toFixed(2)
+            (totalPoints / enrolment).toFixed(2),
           );
         }
 
@@ -1835,16 +1978,16 @@ export const StudentMarkAnalysis = async (req, res, next) => {
       // Calculate overall average for this subject
       const totalPoints = subjectData.streams.reduce(
         (sum, stream) => sum + stream.avgPoints * stream.enrolment,
-        0
+        0,
       );
       const totalStudents = subjectData.streams.reduce(
         (sum, stream) => sum + stream.enrolment,
-        0
+        0,
       );
 
       if (totalStudents > 0) {
         subjectData.overallAvg = parseFloat(
-          (totalPoints / totalStudents).toFixed(2)
+          (totalPoints / totalStudents).toFixed(2),
         );
       }
 
@@ -1859,14 +2002,14 @@ export const StudentMarkAnalysis = async (req, res, next) => {
 
     // Prepare the final response
     const response = {
-      examDetails : markList.examDetails,
+      examDetails: markList.examDetails,
       schoolDetails: markList.schoolDetails,
       performanceData: performanceData,
-      form : form
+      form: form,
     };
 
     // res.status(200).json(response);
-    return response
+    return response;
   } catch (err) {
     next(err);
   }
@@ -1876,13 +2019,13 @@ export const StudentMarkAnalysis = async (req, res, next) => {
 export const StudentMarkListReady = async (req, res, next) => {
   try {
     const markList = await StudentMarkList(req);
-    // console.log(markList.formattedStudents);
+    console.log(markList);
     res.status(200).json(markList.formattedStudents);
   } catch (err) {
+    console.log(err)
     next(err);
   }
 };
-
 
 // GET EXAMS ATTEMPTED BY STUDENT
 export const StudentAttemptedExams = async (req, res, next) => {

@@ -4,6 +4,7 @@ import { sanitizeStringVariables } from "../../../utils/sanitizeString.js";
 
 export const getSelectivePerStream = async (req, res, next) => {
   const { year, form, stream_id, subject } = req.body;
+  console.log(year, form, stream_id, subject);
 
   try {
     // Validate required parameters
@@ -53,6 +54,7 @@ export const getSelectivePerStream = async (req, res, next) => {
 
     res.status(200).json(result.rows);
   } catch (err) {
+    console.log(err)
     console.error("Error in getSelectivePerStream:", err);
     next(createError(500, "Failed to retrieve selective students"));
   }
@@ -103,6 +105,7 @@ export const getSelectiveForAllStreams = async (req, res, next) => {
 
     res.status(200).json(result.rows);
   } catch (err) {
+    console.log(err)
     console.error("Error in getSelectiveForAllStreams:", err);
     next(createError(500, "Failed to retrieve selective students"));
   }

@@ -974,8 +974,8 @@ export const generateStudentReportPdf = async (response) => {
           doc
             .font("Times-Roman")
             .fontSize(11)
-            .text(`Closing Date : 30/03/2025`, 25, schoolDatesY + 30)
-            .text(`Opening Date : 28/04/2025`, 25, schoolDatesY + 45);
+            .text(`Closing Date : 20/02/2026`, 25, schoolDatesY + 30)
+            .text(`Opening Date : 04/03/2026`, 25, schoolDatesY + 45);
 
           // 52. Remarks section
           const classTeacherSignaturePath =

@@ -26,8 +26,14 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
     // Check if form is in system88 (forms 19, 20, 21, 22)
     const system88 = [19, 20, 21, 22];
     const isSystem88Form = system88.includes(
-      parseInt(response.examDetails.form)
+      parseInt(response.examDetails.form),
     );
+    const nonCBCFormMap = {
+      19: 1,
+      20: 2,
+      21: 3,
+      22: 4,
+    };
 
     // Calculate how many students per page based on available space
     const studentsPerPage = Math.floor((doc.page.height - 200) / 20);
@@ -39,7 +45,7 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
     if (!fs.existsSync(logoPath)) {
       logoPath = path.join(
         __dirname,
-        "../../../../public/images/defaults/logo.jpeg"
+        "../../../../public/images/defaults/logo.jpeg",
       );
       if (!fs.existsSync(logoPath)) {
         logoPath = null;
@@ -98,14 +104,16 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
         .font("Times-Bold")
         .fontSize(12)
         .text(
-          `MARKLIST - ${response.examDetails.examname} TERM ${response.examDetails.term} - ${response.examDetails.year}` ||
+          `MARKLIST - ${response.exam_name} TERM ${response.examDetails.term} - ${
+            isSystem88Form ? "FORM" : "GRADE"
+          } ${isSystem88Form ? nonCBCFormMap[response.examDetails.form] : response.examDetails.form} ${response.examDetails.year}` ||
             " ",
           20,
           y,
           {
             align: "center",
             width: backgroundWidth,
-          }
+          },
         );
       doc.moveDown(0.5);
     };
@@ -138,7 +146,7 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
           .filter(
             (header) =>
               // Remove 'Mrks', 'Pts', 'S.Rk', 'O.Rk' columns
-              !["Mrks", "Pts", "S.Rk", "O.Rk"].includes(header)
+              !["Mrks", "Pts", "S.Rk", "O.Rk"].includes(header),
           );
 
         headers = [...headers, ...filteredHeaders];
@@ -167,10 +175,10 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
           i === 0
             ? snColWidth
             : i === 1
-            ? admColWidth
-            : i === 2
-            ? nameColWidth
-            : subjectColWidth;
+              ? admColWidth
+              : i === 2
+                ? nameColWidth
+                : subjectColWidth;
 
         doc
           .moveTo(x, tableTop)
@@ -253,7 +261,7 @@ export const generateMarklistPDF = async (response, callback = () => {}) => {
                 return header;
               })
               .filter(
-                (header) => !["Mrks", "Pts", "S.Rk", "O.Rk"].includes(header)
+                (header) => !["Mrks", "Pts", "S.Rk", "O.Rk"].includes(header),
               );
 
         displayedHeaders.forEach((header) => {

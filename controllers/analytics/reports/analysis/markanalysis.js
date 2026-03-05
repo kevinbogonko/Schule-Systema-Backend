@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const generateMarkAnalysisPDF = async (
   response,
-  callback = () => {}
+  callback = () => {},
 ) => {
   try {
     const doc = new PDFDocument({
@@ -46,7 +46,7 @@ export const generateMarkAnalysisPDF = async (
             `Page ${pageNumber + 1} of ${totalPages}`,
             doc.page.width - 100,
             doc.page.height - 20,
-            { align: "center", width: 100 }
+            { align: "center", width: 100 },
           );
       }
     };
@@ -58,7 +58,7 @@ export const generateMarkAnalysisPDF = async (
     if (!fs.existsSync(logoPath)) {
       logoPath = path.join(
         __dirname,
-        "../../../../public/images/defaults/logo.jpeg"
+        "../../../../public/images/defaults/logo.jpeg",
       );
       if (!fs.existsSync(logoPath)) {
         logoPath = null;
@@ -75,7 +75,13 @@ export const generateMarkAnalysisPDF = async (
         console.error("Error loading logo image:", imageError);
       }
     }
-
+    const system844 = [19, 20, 21, 22];
+    const nonCBCFormMap = {
+      19: 1,
+      20: 2,
+      21: 3,
+      22: 4,
+    };
     doc
       .font("Times-Bold")
       .fontSize(12)
@@ -99,27 +105,30 @@ export const generateMarkAnalysisPDF = async (
       .font("Times-Bold")
       .fontSize(12)
       .text(
-        `SUBJECT PERFORMANCE ANALYSIS - FORM ${response.examDetails?.form} ${response.examDetails?.examname} ${response.examDetails?.year}` || "",
+        `SUBJECT PERFORMANCE ANALYSIS - FORM ${system844.includes(Number(response.examDetails.form)) ? nonCBCFormMap[response.examDetails.form] : response.examDetails.form} ${response.examDetails?.examname} TERM ${response.examDetails?.term} ${response.examDetails?.year}` ||
+          "",
         {
           align: "center",
-        }
+        },
       )
       .moveDown(0.5);
 
+    // Reordered grades array - A first, E last
     const grades = [
-      "E",
-      "D-",
-      "D",
-      "D+",
-      "C-",
-      "C",
-      "C+",
-      "B-",
-      "B",
-      "B+",
-      "A-",
       "A",
+      "A-",
+      "B+",
+      "B",
+      "B-",
+      "C+",
+      "C",
+      "C-",
+      "D+",
+      "D",
+      "D-",
+      "E",
     ];
+
     const gradePoints = {
       E: 1,
       "D-": 2,
@@ -170,7 +179,7 @@ export const generateMarkAnalysisPDF = async (
 
       const totalFixedWidth = Object.values(fixedColWidths).reduce(
         (sum, w) => sum + w,
-        0
+        0,
       );
       const gradeColWidth = (totalWidth - totalFixedWidth) / grades.length;
 
@@ -204,16 +213,16 @@ export const generateMarkAnalysisPDF = async (
           i === 0
             ? colWidths.enrolment
             : i === 1
-            ? colWidths.stream
-            : i < 2 + grades.length
-            ? colWidths[grades[i - 2]]
-            : i === 2 + grades.length
-            ? colWidths.avgPoints
-            : i === 3 + grades.length
-            ? colWidths.grade
-            : i === 4 + grades.length
-            ? colWidths.instructor
-            : colWidths.rank;
+              ? colWidths.stream
+              : i < 2 + grades.length
+                ? colWidths[grades[i - 2]]
+                : i === 2 + grades.length
+                  ? colWidths.avgPoints
+                  : i === 3 + grades.length
+                    ? colWidths.grade
+                    : i === 4 + grades.length
+                      ? colWidths.instructor
+                      : colWidths.rank;
 
         // Header background and text
         doc
@@ -290,7 +299,7 @@ export const generateMarkAnalysisPDF = async (
           .lineTo(rowX, currentY + rowHeight)
           .stroke();
 
-        // Grades
+        // Grades (now displayed with A first, E last)
         grades.forEach((grade) => {
           doc.text(
             (stream.grades[grade] || 0).toString(),
@@ -299,7 +308,7 @@ export const generateMarkAnalysisPDF = async (
             {
               width: colWidths[grade] - 4,
               align: "center",
-            }
+            },
           );
           rowX += colWidths[grade];
           doc
@@ -409,15 +418,15 @@ export const generateMarkAnalysisPDF = async (
         .lineTo(overallX, currentY + rowHeight)
         .stroke();
 
-      // Sum of all grades
+      // Sum of all grades (now with A first, E last)
       const totalEnrolment = subject.streams.reduce(
         (sum, stream) => sum + stream.enrolment,
-        0
+        0,
       );
       grades.forEach((grade) => {
         const sum = subject.streams.reduce(
           (sum, stream) => sum + (stream.grades[grade] || 0),
-          0
+          0,
         );
         doc.text(sum.toString(), overallX + 2, currentY + 5, {
           width: colWidths[grade] - 4,

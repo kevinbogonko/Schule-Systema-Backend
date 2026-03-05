@@ -197,28 +197,31 @@ export const addStudentsFromExcel = async (req, res, next) => {
       return next(createError(400, "No data found in Excel file"));
     }
 
-    await client.query("BEGIN");
     const insertedStudents = [];
     const errorRows = [];
 
     for (const [index, row] of data.entries()) {
+      await client.query("BEGIN"); // 🔥 transaction per row
+
       try {
         let {
           id,
           fname,
           mname = null,
-          lname = null,
+          lname,
           sex,
-          dob = "2007-01-01",
+          dob,
           stream_id,
           kcpe_marks = 1,
-          form,
-          year,
+          current_form,
+          current_year,
+          year_of_enrolment,
+          status,
           phone,
           address = null,
         } = row;
 
-        // Convert Excel date serial to string if needed
+        // Convert Excel serial date
         if (typeof dob === "number") {
           dob = excelDateToJSDate(dob);
         }
@@ -230,56 +233,58 @@ export const addStudentsFromExcel = async (req, res, next) => {
           "sex",
           "dob",
           "stream_id",
-          "kcpe_marks",
-          "form",
-          "year",
+          "current_form",
+          "current_year",
+          "year_of_enrolment",
           "phone",
         ]);
 
-        // Sanitization and validation
+        // Sanitization (match addStudent)
+        sanitizeAndValidate(id, VALIDATION_PATTERNS.NUMERIC, "student ID");
+
         const sanitizedFName = sanitizeAndValidate(
           fname,
           VALIDATION_PATTERNS.ALPHANUMERIC,
-          "first name"
+          "first name",
         );
+
         const sanitizedMName = mname ? sanitizeStringVariables(mname) : null;
+
         const sanitizedLName = sanitizeAndValidate(
           lname,
           VALIDATION_PATTERNS.ALPHANUMERIC,
-          "last name"
+          "last name",
         );
+
         const sanitizedSex = sanitizeAndValidate(
           sex,
           VALIDATION_PATTERNS.ALPHANUMERIC,
-          "sex"
+          "sex",
         );
-        const sanitizedDOB = sanitizeAndValidate(
-          dob,
-          VALIDATION_PATTERNS.ALPHANUMERIC,
-          "date of birth"
-        );
+
         const sanitizedForm = sanitizeAndValidate(
-          form,
+          current_form,
           VALIDATION_PATTERNS.ALPHANUMERIC,
-          "form"
+          "current_form",
         );
+
         const sanitizedYear = sanitizeAndValidate(
-          year,
+          current_year,
           VALIDATION_PATTERNS.ALPHANUMERIC,
-          "year"
+          "current_year",
         );
+
         const sanitizedAddress = address
           ? sanitizeStringVariables(address)
           : null;
 
-        sanitizeAndValidate(id, VALIDATION_PATTERNS.NUMERIC, "student ID");
         validateFormLevel(sanitizedForm);
 
         const studentResult = await client.query(
           `INSERT INTO students 
            (id, fname, mname, lname, sex, dob, stream_id, kcpe_marks, 
             year_of_enrolment, current_form, current_year, phone, address)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
            RETURNING *`,
           [
             id,
@@ -287,34 +292,46 @@ export const addStudentsFromExcel = async (req, res, next) => {
             sanitizedMName,
             sanitizedLName,
             sanitizedSex,
-            sanitizedDOB,
+            dob, // 🔥 use raw date like single version
             stream_id,
-            kcpe_marks,
+            kcpe_marks || 1,
             sanitizedYear,
             sanitizedForm,
             sanitizedYear,
             phone,
             sanitizedAddress,
-          ]
+          ],
         );
 
         await client.query(
           `INSERT INTO selectives (student_id, form, stream_id, year) 
-           VALUES ($1, $2, $3, $4)`,
-          [id, sanitizedForm, stream_id, sanitizedYear]
+           VALUES ($1,$2,$3,$4)`,
+          [id, sanitizedForm, stream_id, sanitizedYear],
         );
+
+        // IMPORTANT: ensure createUserAccount uses same transaction
+        await createUserAccount({
+          firstname: sanitizedFName,
+          lastname: sanitizedLName,
+          phone,
+          role: "student",
+          user_ref_id: id,
+          // client, // 🔥 pass client if your function supports it
+        });
+
+        await client.query("COMMIT");
 
         insertedStudents.push(studentResult.rows[0]);
       } catch (error) {
+        await client.query("ROLLBACK");
+
         errorRows.push({
-          row: index + 1,
+          row: index + 2, // Excel row index (header offset)
           error: error.message,
           data: row,
         });
       }
     }
-
-    await client.query("COMMIT");
 
     if (errorRows.length > 0) {
       return res.status(207).json({
@@ -329,13 +346,7 @@ export const addStudentsFromExcel = async (req, res, next) => {
       students: insertedStudents,
     });
   } catch (error) {
-    await client.query("ROLLBACK");
-
-    if (error.code === "23505") {
-      return next(createError(400, "One or more students already exist"));
-    }
-
-    next(createError(500, "Error processing Excel file"));
+    next(createError(500, "Error processing Excel file", error));
   } finally {
     client.release();
   }

@@ -63,7 +63,7 @@ app.use(
     credentials: true,
     exposedHeaders: ['X-XSRF-TOKEN']
   })
-);
+); // Comment this out in production
 app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({

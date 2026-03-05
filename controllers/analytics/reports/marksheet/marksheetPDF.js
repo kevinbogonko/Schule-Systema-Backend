@@ -33,7 +33,7 @@ export const generateMarksheetPDF = async (response, callback = () => {}) => {
     if (!fs.existsSync(logoPath)) {
       logoPath = path.join(
         __dirname,
-        "../../../../public/images/defaults/logo.jpeg"
+        "../../../../public/images/defaults/logo.jpeg",
       );
       if (!fs.existsSync(logoPath)) {
         logoPath = null;
@@ -59,6 +59,14 @@ export const generateMarksheetPDF = async (response, callback = () => {}) => {
           console.error("Error loading logo:", err);
         }
       }
+
+          const system844 = [19, 20, 21, 22];
+          const nonCBCFormMap = {
+            19: 1,
+            20: 2,
+            21: 3,
+            22: 4,
+          };
 
       doc
         .font("Times-Bold")
@@ -91,10 +99,18 @@ export const generateMarksheetPDF = async (response, callback = () => {}) => {
         .fillColor("black")
         .font("Times-Bold")
         .fontSize(12)
-        .text(`MARKSHEET - ${response.schoolDetails.exam}`, 20, y, {
-          align: "center",
-          width: backgroundWidth,
-        });
+        // .text(`MARKSHEET - ${response.schoolDetails.exam}`, 20, y, {
+        .text(
+          `MARKSHEET - ${response?.exam} TERM ${response?.term} ${
+            system844.includes(Number(response?.form)) ? "FORM" : "GRADE"
+          } ${system844.includes(Number(response?.form)) ? nonCBCFormMap[response?.form] : response?.form} - ${response?.year}`,
+          20,
+          y,
+          {
+            align: "center",
+            width: backgroundWidth,
+          },
+        );
       doc.moveDown(0.5);
     };
 
@@ -127,10 +143,10 @@ export const generateMarksheetPDF = async (response, callback = () => {}) => {
           i === 0
             ? snColWidth
             : i === 1
-            ? admColWidth
-            : i === 2
-            ? nameColWidth
-            : subjectColWidth;
+              ? admColWidth
+              : i === 2
+                ? nameColWidth
+                : subjectColWidth;
 
         doc
           .moveTo(x, tableTop)
@@ -228,7 +244,21 @@ export const generateMarksheetPDF = async (response, callback = () => {}) => {
     };
 
     // Process students in chunks per page
-    const studentRows = response.studentData || [];
+    let studentRows = response.studentData || [];
+
+    // Sort students by admission number (assuming this is the student ID)
+    // Modify this based on what property contains the actual ID
+    studentRows = [...studentRows].sort((a, b) => {
+      // If you have a specific ID field like 'id' or 'studentId'
+      // Replace 'admNo' with the actual ID field name
+      const idA = parseInt(a.admNo) || a.admNo;
+      const idB = parseInt(b.admNo) || b.admNo;
+
+      if (typeof idA === "number" && typeof idB === "number") {
+        return idA - idB;
+      }
+      return String(idA).localeCompare(String(idB));
+    });
 
     // Add header to first page
     await addHeader();

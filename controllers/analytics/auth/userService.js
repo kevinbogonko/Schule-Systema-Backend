@@ -20,7 +20,13 @@ export const createUserAccount = async ({
     `${firstname}${lastname}${rand}@${schoolInit}.sch`.toLowerCase();
 
   // 3 Hash password (default = phone)
-  const hash = await bcrypt.hash(phone, 10);
+  if (!phone) {
+    throw new Error("Phone number is required to create user account");
+  }
+
+  const passwordString = phone.toString();
+
+  const hash = await bcrypt.hash(passwordString, 10);
 
   // 4 Insert into users
   const userRes = await pool.query(

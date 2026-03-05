@@ -28,7 +28,7 @@ export const DashboardData = async (req, res, next) => {
         [currentYear]
       );
       const total_students = parseInt(studentRows[0].count, 10) || 0;
-      console.log(total_students);
+      // console.log(total_students);
 
       // 2. Teachers count
       const { rows: teacherRows } = await pool.query(
@@ -649,7 +649,7 @@ export const DashboardData = async (req, res, next) => {
       return next(createError(403, "Forbidden: Invalid role"));
     }
   } catch (err) {
-    console.log(err)
+    // console.log(err)
     console.error("DashboardData error:", err.message);
     next(err);
   }

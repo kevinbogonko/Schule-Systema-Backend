@@ -112,7 +112,7 @@ export const studentReportMarks = async (req, res, next) => {
     const group_3 = [311, 312, 313, 314, 315];
     const group_4 = [
       441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451, 501, 502, 503, 504,
-      511,
+      511,565
     ];
 
     console.log("📚 Fetching school particulars...");
@@ -185,10 +185,11 @@ export const studentReportMarks = async (req, res, next) => {
     const subjects = subjectsRes.rows;
     const subjectMap = new Map(subjects.map((sub) => [sub.id, sub]));
     console.log(`✅ Active subjects fetched: ${subjects.length} subjects`);
+    console.log(subjectMap)
 
-    const selectiveSubjects = subjects.filter((sub) => sub.isselective === 1);
+    const selectiveSubjects = subjects.filter((sub) => Number(sub.isselective) === 1);
     const nonSelectiveSubjects = subjects.filter(
-      (sub) => sub.isselective !== 1
+      (sub) => Number(sub.isselective) !== 1
     );
     console.log(
       `📊 Subject breakdown: ${nonSelectiveSubjects.length} non-selective, ${selectiveSubjects.length} selective`
@@ -247,8 +248,8 @@ export const studentReportMarks = async (req, res, next) => {
 
     // Fetch grading criteria for all subjects (both CBC and 844)
     const gradingRes = await pool.query(
-      `SELECT * FROM ${gradingTable} WHERE subject_id = ANY($1)`,
-      [subjects.map((sub) => sub.id)]
+      `SELECT * FROM ${gradingTable} WHERE subject_id = ANY($1) AND exam_id = $2`,
+      [subjects.map((sub) => sub.id), exams?.exam_1?.name],
     );
 
     const gradingMap844 = new Map();
@@ -709,7 +710,7 @@ export const studentReportMarks = async (req, res, next) => {
     );
 
     const streamsRes = await pool.query(
-      `SELECT s.stream_id, sn.stream_name 
+      `SELECT s.id AS stream_id, sn.stream_name 
        FROM streams s
        INNER JOIN stream_names sn ON s.stream_id = sn.id
        WHERE s.form = $1`,
@@ -1375,7 +1376,8 @@ export const studentReportMarks = async (req, res, next) => {
           comments: [
             {
               class_teacher: {
-                officer_name: classTeacherName,
+                // officer_name: classTeacherName,
+                officer_name: form == 21 ? 'Ms. Gloria Chepkemoi' : 'Mr. Rodgers Ongoro',
                 say: classTeacherRemark,
                 signature: "/signatures/class_teacher.png",
               },
@@ -1419,6 +1421,8 @@ export const studentReportMarks = async (req, res, next) => {
     );
 
     // res.status(200).json(response);
+    // res.json(response)
+    // console.log(response)
     return response;
   } catch (err) {
     console.error("💥 CRITICAL ERROR:", err);
