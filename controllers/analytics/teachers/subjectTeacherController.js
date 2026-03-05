@@ -630,7 +630,7 @@ export const SubjectTeacherPerStream = async (req, res, next) => {
     const sanitizedYear = sanitizeStringVariables(year);
 
     // const subjectsTable = `subjects_form_${sanitizedForm}`;
-    const subjectTeachersTable = `subjectteachers_form_${sanitizedForm}`;
+    const subjectTeachersTable = `subjectteachers`;
 
     // 3. Fetch subjects with status = 1
     // const subjectResult = await pool.query(
