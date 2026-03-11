@@ -1717,6 +1717,7 @@ export const StudentMarkList = async (req, res, next) => {
   try {
     const studentMarkResult = await studentReportMarks(req);
     const dataToFormat = studentMarkResult.studentResults;
+    // console.log(dataToFormat[1]?.results);
     const examInformation = studentMarkResult.examDetails;
 
     if (!dataToFormat || !Array.isArray(dataToFormat)) {
@@ -1769,7 +1770,8 @@ export const StudentMarkList = async (req, res, next) => {
         const code = parseInt(subject.code); // code like 101
         const init = subjectMap[code];
 
-        if (init && subject.included) {
+        // if (init && subject.included) {
+        if (init) {
           const mark = subject.marks?.mark || 0;
           const grade = subject.marks?.grade || "E";
           subjectData[init] = `${mark} ${grade}`;

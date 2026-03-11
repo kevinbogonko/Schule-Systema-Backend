@@ -9,6 +9,8 @@ router.post("/marklistpdf", async (req, res, next) => {
     // 1. Generate report data
     const marklistData = await StudentMarkList(req);
  
+    // console.log(marklistData?.formattedStudents[1]);
+
     // 2. Wrap PDF generation in a Promise to await the buffer
     const pdfBuffer = await new Promise((resolve, reject) => {
       generateMarklistPDF(marklistData, (err, buffer) => {
